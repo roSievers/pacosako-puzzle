@@ -1,0 +1,322 @@
+module Main exposing (main)
+
+import Browser
+import Browser.Dom as Dom
+import Element exposing (Element, alignTop, centerX, centerY, el, fill, height, padding, rgb255, row, spacing, text, width)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Font as Font
+import Element.Input as Input
+import Html exposing (Html)
+import Html.Attributes
+import Html.Events
+import Html.Events.Extra.Mouse as Mouse
+import Json.Decode as Decode
+import Json.Encode as Encode
+import Svg exposing (Svg)
+import Svg.Attributes
+import Svg.Events
+import Task
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
+
+
+type alias Model =
+    { game : PacoPosition
+    , drag : DragState
+    }
+
+
+type alias PacoPosition =
+    { moveNumber : Int
+    }
+
+
+type DragState
+    = DragOff
+    | Dragging { start : ( Float, Float ), current : ( Float, Float ), rect : Rect }
+
+
+startDrag : Rect -> Mouse.Event -> DragState
+startDrag element event =
+    Dragging
+        { start = substract event.clientPos ( element.x, element.y )
+        , current = substract event.clientPos ( element.x, element.y )
+        , rect = element
+        }
+
+
+moveDrag : Mouse.Event -> DragState -> DragState
+moveDrag event drag =
+    case drag of
+        DragOff ->
+            DragOff
+
+        Dragging { start, current, rect } ->
+            Dragging { start = start, current = substract event.clientPos ( rect.x, rect.y ), rect = rect }
+
+
+substract ( x, y ) ( dx, dy ) =
+    ( x - dx, y - dy )
+
+
+relativeInside : Rect -> ( Float, Float ) -> ( Float, Float )
+relativeInside rect ( x, y ) =
+    ( (x - rect.x) / rect.width, (y - rect.y) / rect.height )
+
+
+absoluteOutside : Rect -> ( Float, Float ) -> ( Float, Float )
+absoluteOutside rect ( x, y ) =
+    ( x * rect.width + rect.x, y * rect.height + rect.y )
+
+
+type alias Rect =
+    { x : Float
+    , y : Float
+    , width : Float
+    , height : Float
+    }
+
+
+type Msg
+    = NoOp
+    | MouseDown Mouse.Event
+    | MouseMove Mouse.Event
+    | MouseUp Mouse.Event
+    | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
+
+
+initialModel : Model
+initialModel =
+    { game = { moveNumber = 0 }
+    , drag = DragOff
+    }
+
+
+init : flags -> ( Model, Cmd Msg )
+init _ =
+    ( initialModel, Cmd.none )
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
+        -- When we register a mouse down event on the board we read the current board position
+        -- from the DOM.
+        MouseDown event ->
+            ( model
+            , Task.attempt
+                (\res -> GotBoardPosition res event)
+                (Dom.getElement "boardDiv")
+            )
+
+        MouseMove event ->
+            ( { model | drag = moveDrag event model.drag }, Cmd.none )
+
+        MouseUp event ->
+            ( { model | drag = DragOff }, Cmd.none )
+
+        GotBoardPosition res event ->
+            case res of
+                Ok element ->
+                    ( { model | drag = startDrag element.element event }, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+
+subscriptions : model -> Sub Msg
+subscriptions _ =
+    Sub.none
+
+
+
+--- View code
+
+
+view : Model -> Html Msg
+view model =
+    Element.layout []
+        (ui model)
+
+
+ui : Model -> Element Msg
+ui model =
+    Element.row [ width fill, height fill ]
+        [ positionView model.game model.drag
+        , sidebar model
+        ]
+
+
+positionView : PacoPosition -> DragState -> Element Msg
+positionView position drag =
+    el [ width fill, height fill ]
+        (el [ centerX, centerY ]
+            (Element.html
+                (Html.div
+                    [ Mouse.onDown MouseDown
+                    , Mouse.onMove MouseMove
+                    , Mouse.onUp MouseUp
+                    , Html.Attributes.id "boardDiv"
+                    ]
+                    [ positionSvg position drag ]
+                )
+            )
+        )
+
+
+sidebar : Model -> Element Msg
+sidebar model =
+    Element.column [ width fill, height fill, spacing 10 ]
+        [ Element.text "Paco Ŝako Puzzle"
+        , Element.text "Sidebar"
+
+        --, Element.text <| Debug.toString model.drag
+        ]
+
+
+boardViewBox : Rect
+boardViewBox =
+    { x = -70
+    , y = -30
+    , width = 900
+    , height = 920
+    }
+
+
+positionSvg : PacoPosition -> DragState -> Html Msg
+positionSvg _ drag =
+    Svg.svg
+        [ Svg.Attributes.width "450"
+        , Svg.Attributes.height "460"
+        , Svg.Attributes.viewBox "-70 -30 900 920"
+        ]
+        [ board
+        , dragHints drag
+        ]
+
+
+board : Svg msg
+board =
+    Svg.g []
+        [ Svg.rect
+            [ Svg.Attributes.x "-1000"
+            , Svg.Attributes.y "-1000"
+            , Svg.Attributes.width "8020"
+            , Svg.Attributes.height "8020"
+            , Svg.Attributes.fill "#EEE"
+            ]
+            []
+        , Svg.rect
+            [ Svg.Attributes.x "-10"
+            , Svg.Attributes.y "-10"
+            , Svg.Attributes.width "820"
+            , Svg.Attributes.height "820"
+            , Svg.Attributes.fill "#242"
+            ]
+            []
+        , Svg.rect
+            [ Svg.Attributes.x "0"
+            , Svg.Attributes.y "0"
+            , Svg.Attributes.width "800"
+            , Svg.Attributes.height "800"
+            , Svg.Attributes.fill "#595"
+            ]
+            []
+        , Svg.path
+            [ Svg.Attributes.d "M 0,0 H 800 V 100 H 0 Z M 0,200 H 800 V 300 H 0 Z M 0,400 H 800 V 500 H 0 Z M 0,600 H 800 V 700 H 0 Z M 100,0 V 800 H 200 V 0 Z M 300,0 V 800 H 400 V 0 Z M 500,0 V 800 H 600 V 0 Z M 700,0 V 800 H 800 V 0 Z"
+            , Svg.Attributes.fill "#9F9"
+            ]
+            []
+        , columnTag "a" "50"
+        , columnTag "b" "150"
+        , columnTag "c" "250"
+        , columnTag "d" "350"
+        , columnTag "e" "450"
+        , columnTag "f" "550"
+        , columnTag "g" "650"
+        , columnTag "h" "750"
+        , rowTag "1" "770"
+        , rowTag "2" "670"
+        , rowTag "3" "570"
+        , rowTag "4" "470"
+        , rowTag "5" "370"
+        , rowTag "6" "270"
+        , rowTag "7" "170"
+        , rowTag "8" "70"
+        ]
+
+
+columnTag : String -> String -> Svg msg
+columnTag letter x =
+    Svg.text_
+        [ Svg.Attributes.style "text-anchor:middle;font-size:50px;pointer-events:none;-moz-user-select: none;"
+        , Svg.Attributes.x x
+        , Svg.Attributes.y "870"
+        ]
+        [ Svg.text letter ]
+
+
+rowTag : String -> String -> Svg msg
+rowTag digit y =
+    Svg.text_
+        [ Svg.Attributes.style "text-anchor:end;font-size:50px;pointer-events:none;-moz-user-select: none;"
+        , Svg.Attributes.x "-25"
+        , Svg.Attributes.y y
+        ]
+        [ Svg.text digit ]
+
+
+dragHints : DragState -> Svg msg
+dragHints drag =
+    case drag of
+        DragOff ->
+            Svg.g [] []
+
+        Dragging { start, current, rect } ->
+            let
+                ( sx, sy ) =
+                    start
+                        |> relativeInside { rect | x = 0, y = 0 }
+                        |> absoluteOutside boardViewBox
+
+                ( cx, cy ) =
+                    current
+                        |> relativeInside { rect | x = 0, y = 0 }
+                        |> absoluteOutside boardViewBox
+            in
+            Svg.g []
+                [ Svg.circle
+                    [ Svg.Attributes.cx (String.fromFloat sx)
+                    , Svg.Attributes.cy (String.fromFloat sy)
+                    , Svg.Attributes.r "30"
+                    , Svg.Attributes.fill "#F00"
+                    ]
+                    []
+                , Svg.circle
+                    [ Svg.Attributes.cx (String.fromFloat cx)
+                    , Svg.Attributes.cy (String.fromFloat cy)
+                    , Svg.Attributes.r "30"
+                    , Svg.Attributes.fill "#0F0"
+                    ]
+                    []
+                ]
+
+
+getX ( x, _ ) =
+    x
+
+
+getY ( _, y ) =
+    y
