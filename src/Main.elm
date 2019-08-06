@@ -3,22 +3,15 @@ module Main exposing (main)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
-import Element exposing (Element, alignTop, centerX, centerY, el, fill, height, padding, rgb255, row, spacing, text, width)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
-import Element.Input as Input
+import Element exposing (Element, centerX, centerY, el, fill, height, row, spacing, text, width)
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Pieces
 import Sako
 import Svg exposing (Svg)
 import Svg.Attributes
-import Svg.Events
 import Task
 
 
@@ -64,10 +57,11 @@ moveDrag event drag =
         DragOff ->
             DragOff
 
-        Dragging { start, current, rect } ->
+        Dragging { start, rect } ->
             Dragging { start = start, current = substract event.clientPos ( rect.x, rect.y ), rect = rect }
 
 
+substract : ( Float, Float ) -> ( Float, Float ) -> ( Float, Float )
 substract ( x, y ) ( dx, dy ) =
     ( x - dx, y - dy )
 
@@ -91,8 +85,7 @@ type alias Rect =
 
 
 type Msg
-    = NoOp
-    | MouseDown Mouse.Event
+    = MouseDown Mouse.Event
     | MouseMove Mouse.Event
     | MouseUp Mouse.Event
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
@@ -128,9 +121,6 @@ init flags =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        NoOp ->
-            ( model, Cmd.none )
-
         -- When we register a mouse down event on the board we read the current board position
         -- from the DOM.
         MouseDown event ->
@@ -143,7 +133,7 @@ update msg model =
         MouseMove event ->
             ( { model | drag = moveDrag event model.drag }, Cmd.none )
 
-        MouseUp event ->
+        MouseUp _ ->
             ( { model | drag = DragOff }, Cmd.none )
 
         GotBoardPosition res event ->
@@ -368,11 +358,3 @@ dragHints drag =
                     ]
                     []
                 ]
-
-
-getX ( x, _ ) =
-    x
-
-
-getY ( _, y ) =
-    y
