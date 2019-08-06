@@ -225,15 +225,19 @@ boardViewBox =
     }
 
 
-{-| Assumes, that height > width for boardViewBox
+{-| The svg showing the game board is a square. The viewport does not need to be a square.
+The browser then centers the requested viewport inside the realized viewport. This function
+calculates the rectangle used for the realized viewport in order to transform coordinates.
+
+Assumes, that height > width for boardViewBox.
+
 -}
-outerBoardViewBox : Rect
-outerBoardViewBox =
-    let
-        x =
-            boardViewBox.x - (boardViewBox.height - boardViewBox.width) / 2
-    in
-    { boardViewBox | x = x, width = boardViewBox.height }
+realizedBoardViewBox : Rect
+realizedBoardViewBox =
+    { boardViewBox
+        | x = boardViewBox.x - (boardViewBox.height - boardViewBox.width) / 2
+        , width = boardViewBox.height
+    }
 
 
 viewBox : Rect -> Svg.Attribute msg
@@ -336,12 +340,12 @@ dragHints drag =
                 ( sx, sy ) =
                     start
                         |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside outerBoardViewBox
+                        |> absoluteOutside realizedBoardViewBox
 
                 ( cx, cy ) =
                     current
                         |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside outerBoardViewBox
+                        |> absoluteOutside realizedBoardViewBox
             in
             Svg.g []
                 [ Svg.circle
