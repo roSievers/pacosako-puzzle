@@ -218,11 +218,34 @@ sidebar model =
 
 boardViewBox : Rect
 boardViewBox =
-    { x = -70
-    , y = -30
+    { x = -70 -- -70
+    , y = -30 -- -30
     , width = 900
-    , height = 920
+    , height = 920 -- 920
     }
+
+
+{-| Assumes, that height > width for boardViewBox
+-}
+outerBoardViewBox : Rect
+outerBoardViewBox =
+    let
+        x =
+            boardViewBox.x - (boardViewBox.height - boardViewBox.width) / 2
+    in
+    { boardViewBox | x = x, width = boardViewBox.height }
+
+
+viewBox : Rect -> Svg.Attribute msg
+viewBox rect =
+    String.join
+        " "
+        [ String.fromFloat rect.x
+        , String.fromFloat rect.y
+        , String.fromFloat rect.width
+        , String.fromFloat rect.height
+        ]
+        |> Svg.Attributes.viewBox
 
 
 positionSvg : Int -> PacoPosition -> DragState -> Html Msg
@@ -230,7 +253,7 @@ positionSvg sideLength _ drag =
     Svg.svg
         [ Svg.Attributes.width <| String.fromInt sideLength
         , Svg.Attributes.height <| String.fromInt sideLength
-        , Svg.Attributes.viewBox "-70 -30 900 920"
+        , viewBox boardViewBox
         ]
         [ board
         , dragHints drag
@@ -313,12 +336,12 @@ dragHints drag =
                 ( sx, sy ) =
                     start
                         |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside boardViewBox
+                        |> absoluteOutside outerBoardViewBox
 
                 ( cx, cy ) =
                     current
                         |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside boardViewBox
+                        |> absoluteOutside outerBoardViewBox
             in
             Svg.g []
                 [ Svg.circle
