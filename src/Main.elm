@@ -14,6 +14,8 @@ import Html.Events
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Pieces
+import Sako
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -261,6 +263,9 @@ positionSvg sideLength _ drag =
         ]
         [ board
         , dragHints drag
+        , Svg.g [ Svg.Attributes.transform "translate(300, 600)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.White
+            ]
         ]
 
 
