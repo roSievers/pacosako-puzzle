@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Dom as Dom
+import Browser.Events
 import Element exposing (Element, alignTop, centerX, centerY, el, fill, height, padding, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
@@ -19,7 +20,7 @@ import Svg.Events
 import Task
 
 
-main : Program () Model Msg
+main : Program Decode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -32,6 +33,7 @@ main =
 type alias Model =
     { game : PacoPosition
     , drag : DragState
+    , windowSize : ( Int, Int )
     }
 
 
@@ -92,18 +94,33 @@ type Msg
     | MouseMove Mouse.Event
     | MouseUp Mouse.Event
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
+    | WindowResize Int Int
 
 
-initialModel : Model
-initialModel =
+initialModel : Decode.Value -> Model
+initialModel flags =
     { game = { moveNumber = 0 }
     , drag = DragOff
+    , windowSize = parseWindowSize flags
     }
 
 
-init : flags -> ( Model, Cmd Msg )
-init _ =
-    ( initialModel, Cmd.none )
+parseWindowSize : Decode.Value -> ( Int, Int )
+parseWindowSize value =
+    Decode.decodeValue sizeDecoder value
+        |> Result.withDefault ( 100, 100 )
+
+
+sizeDecoder : Decode.Decoder ( Int, Int )
+sizeDecoder =
+    Decode.map2 (\x y -> ( x, y ))
+        (Decode.field "width" Decode.int)
+        (Decode.field "height" Decode.int)
+
+
+init : Decode.Value -> ( Model, Cmd Msg )
+init flags =
+    ( initialModel flags, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -135,10 +152,13 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        WindowResize width height ->
+            ( { model | windowSize = ( width, height ) }, Cmd.none )
+
 
 subscriptions : model -> Sub Msg
 subscriptions _ =
-    Sub.none
+    Browser.Events.onResize WindowResize
 
 
 
@@ -154,14 +174,25 @@ view model =
 ui : Model -> Element Msg
 ui model =
     Element.row [ width fill, height fill ]
-        [ positionView model.game model.drag
+        [ positionView model model.game model.drag
         , sidebar model
         ]
 
 
-positionView : PacoPosition -> DragState -> Element Msg
-positionView position drag =
-    el [ width fill, height fill ]
+{-| We render the board view slightly smaller than the window in order to avoid artifacts.
+-}
+windowSafetyMargin : Int
+windowSafetyMargin =
+    10
+
+
+positionView : Model -> PacoPosition -> DragState -> Element Msg
+positionView model position drag =
+    let
+        ( _, windowHeight ) =
+            model.windowSize
+    in
+    el [ width (Element.px windowHeight), height fill ]
         (el [ centerX, centerY ]
             (Element.html
                 (Html.div
@@ -170,7 +201,7 @@ positionView position drag =
                     , Mouse.onUp MouseUp
                     , Html.Attributes.id "boardDiv"
                     ]
-                    [ positionSvg position drag ]
+                    [ positionSvg (windowHeight - windowSafetyMargin) position drag ]
                 )
             )
         )
@@ -181,8 +212,7 @@ sidebar model =
     Element.column [ width fill, height fill, spacing 10 ]
         [ Element.text "Paco Ŝako Puzzle"
         , Element.text "Sidebar"
-
-        --, Element.text <| Debug.toString model.drag
+        , Element.text <| Debug.toString model.windowSize
         ]
 
 
@@ -195,11 +225,11 @@ boardViewBox =
     }
 
 
-positionSvg : PacoPosition -> DragState -> Html Msg
-positionSvg _ drag =
+positionSvg : Int -> PacoPosition -> DragState -> Html Msg
+positionSvg sideLength _ drag =
     Svg.svg
-        [ Svg.Attributes.width "450"
-        , Svg.Attributes.height "460"
+        [ Svg.Attributes.width <| String.fromInt sideLength
+        , Svg.Attributes.height <| String.fromInt sideLength
         , Svg.Attributes.viewBox "-70 -30 900 920"
         ]
         [ board
@@ -211,14 +241,6 @@ board : Svg msg
 board =
     Svg.g []
         [ Svg.rect
-            [ Svg.Attributes.x "-1000"
-            , Svg.Attributes.y "-1000"
-            , Svg.Attributes.width "8020"
-            , Svg.Attributes.height "8020"
-            , Svg.Attributes.fill "#EEE"
-            ]
-            []
-        , Svg.rect
             [ Svg.Attributes.x "-10"
             , Svg.Attributes.y "-10"
             , Svg.Attributes.width "820"
@@ -264,6 +286,7 @@ columnTag letter x =
         [ Svg.Attributes.style "text-anchor:middle;font-size:50px;pointer-events:none;-moz-user-select: none;"
         , Svg.Attributes.x x
         , Svg.Attributes.y "870"
+        , Svg.Attributes.fill "#555"
         ]
         [ Svg.text letter ]
 
@@ -274,6 +297,7 @@ rowTag digit y =
         [ Svg.Attributes.style "text-anchor:end;font-size:50px;pointer-events:none;-moz-user-select: none;"
         , Svg.Attributes.x "-25"
         , Svg.Attributes.y y
+        , Svg.Attributes.fill "#555"
         ]
         [ Svg.text digit ]
 

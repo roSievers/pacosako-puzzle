@@ -2,3 +2,6 @@
 elm-stuff
 # elm-repl generated files
 repl-temp-*
+# Build by elm-live during development
+/elm.js
+/index.html
