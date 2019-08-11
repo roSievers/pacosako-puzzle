@@ -34,6 +34,59 @@ type alias Model =
 
 type alias PacoPosition =
     { moveNumber : Int
+    , pieces : List PacoPiece
+    }
+
+
+type alias PacoPiece =
+    { pieceType : Sako.Piece
+    , color : Sako.Color
+    , position : ( Int, Int )
+    }
+
+
+pacoPiece : Sako.Color -> Sako.Piece -> ( Int, Int ) -> PacoPiece
+pacoPiece color pieceType position =
+    { pieceType = pieceType, color = color, position = position }
+
+
+initialPosition : PacoPosition
+initialPosition =
+    { moveNumber = 0
+    , pieces =
+        [ pacoPiece Sako.White Sako.Rock ( 0, 0 )
+        , pacoPiece Sako.White Sako.Knight ( 1, 0 )
+        , pacoPiece Sako.White Sako.Bishop ( 2, 0 )
+        , pacoPiece Sako.White Sako.Queen ( 3, 0 )
+        , pacoPiece Sako.White Sako.King ( 4, 0 )
+        , pacoPiece Sako.White Sako.Bishop ( 5, 0 )
+        , pacoPiece Sako.White Sako.Knight ( 6, 0 )
+        , pacoPiece Sako.White Sako.Rock ( 7, 0 )
+        , pacoPiece Sako.White Sako.Pawn ( 0, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 1, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 2, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 3, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 4, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 5, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 6, 1 )
+        , pacoPiece Sako.White Sako.Pawn ( 7, 1 )
+        , pacoPiece Sako.Black Sako.Pawn ( 0, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 1, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 2, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 3, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 4, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 5, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 6, 6 )
+        , pacoPiece Sako.Black Sako.Pawn ( 7, 6 )
+        , pacoPiece Sako.Black Sako.Rock ( 0, 7 )
+        , pacoPiece Sako.Black Sako.Knight ( 1, 7 )
+        , pacoPiece Sako.Black Sako.Bishop ( 2, 7 )
+        , pacoPiece Sako.Black Sako.Queen ( 3, 7 )
+        , pacoPiece Sako.Black Sako.King ( 4, 7 )
+        , pacoPiece Sako.Black Sako.Bishop ( 5, 7 )
+        , pacoPiece Sako.Black Sako.Knight ( 6, 7 )
+        , pacoPiece Sako.Black Sako.Rock ( 7, 7 )
+        ]
     }
 
 
@@ -94,7 +147,7 @@ type Msg
 
 initialModel : Decode.Value -> Model
 initialModel flags =
-    { game = { moveNumber = 0 }
+    { game = initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
     }
@@ -245,7 +298,7 @@ viewBox rect =
 
 
 positionSvg : Int -> PacoPosition -> DragState -> Html Msg
-positionSvg sideLength _ drag =
+positionSvg sideLength pacoPosition drag =
     Svg.svg
         [ Svg.Attributes.width <| String.fromInt sideLength
         , Svg.Attributes.height <| String.fromInt sideLength
@@ -253,39 +306,34 @@ positionSvg sideLength _ drag =
         ]
         [ board
         , dragHints drag
-        , Svg.g [ Svg.Attributes.transform "translate(300, 600)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(300, 600)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Rock Sako.White
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(600, 600)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(600, 600)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.White
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(300, 100)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(400, 100)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Rock Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(500, 300)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Knight Sako.White
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(400, 300)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Bishop Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(400, 300)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Queen Sako.White
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(400, 700)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.Queen Sako.Black
-            ]
-        , Svg.g [ Svg.Attributes.transform "translate(400, 700)" ]
-            [ Pieces.figure Pieces.defaultColorScheme Sako.King Sako.White
-            ]
+        , piecesSvg pacoPosition
+        ]
+
+
+piecesSvg : PacoPosition -> Svg msg
+piecesSvg pacoPosition =
+    pacoPosition.pieces
+        |> List.map pieceSvg
+        |> Svg.g []
+
+
+pieceSvg : PacoPiece -> Svg msg
+pieceSvg piece =
+    let
+        ( x, y ) =
+            piece.position
+
+        transform =
+            Svg.Attributes.transform
+                ("translate("
+                    ++ String.fromInt (100 * x)
+                    ++ ", "
+                    ++ String.fromInt (700 - 100 * y)
+                    ++ ")"
+                )
+    in
+    Svg.g [ transform ]
+        [ Pieces.figure Pieces.defaultColorScheme piece.pieceType piece.color
         ]
 
 
