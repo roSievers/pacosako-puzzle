@@ -15,7 +15,7 @@ with permission from Felix Albers.
 
 -}
 
-import Sako exposing (Color(..), Piece(..))
+import Sako
 import Svg exposing (Attribute, Svg)
 import Svg.Attributes exposing (d)
 
@@ -26,7 +26,7 @@ This returns either a path node or a group node containing multiple path nodes.
 More complicated figures (e.g. the knight) layer multiple paths and need a group.
 
 -}
-figure : ColorScheme -> Piece -> Color -> Svg msg
+figure : ColorScheme -> Sako.Piece -> Sako.Color -> Svg msg
 figure scheme piece color =
     let
         attributes =
@@ -89,15 +89,15 @@ blackTransform =
     Svg.Attributes.transform "translate(100, 0) scale(-1, 1)"
 
 
-colorAttributes : ColorScheme -> Color -> List (Svg.Attribute msg)
+colorAttributes : ColorScheme -> Sako.Color -> List (Svg.Attribute msg)
 colorAttributes scheme color =
     case color of
-        White ->
+        Sako.White ->
             [ Svg.Attributes.fill scheme.white.fill
             , Svg.Attributes.stroke scheme.white.stroke
             ]
 
-        Black ->
+        Sako.Black ->
             [ Svg.Attributes.fill scheme.black.fill
             , Svg.Attributes.stroke scheme.black.stroke
             , blackTransform
@@ -127,25 +127,25 @@ unify elements =
 {-| Return a list of `d` attributes the contains the paths required to render the requested Piece.
 Make sure to keep the elements in order!
 -}
-figureAttribute : Piece -> List (Attribute msg)
+figureAttribute : Sako.Piece -> List (Attribute msg)
 figureAttribute piece =
     case piece of
-        Pawn ->
+        Sako.Pawn ->
             [ pawn ]
 
-        Rock ->
+        Sako.Rock ->
             [ rock ]
 
-        Knight ->
+        Sako.Knight ->
             knight
 
-        Bishop ->
+        Sako.Bishop ->
             [ bishop ]
 
-        Queen ->
+        Sako.Queen ->
             [ queen ]
 
-        King ->
+        Sako.King ->
             king
 
 
