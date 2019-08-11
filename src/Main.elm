@@ -3,7 +3,13 @@ module Main exposing (main)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
-import Element exposing (Element, centerX, centerY, el, fill, height, row, spacing, text, width)
+import Element exposing (Element, centerX, centerY, el, fill, fillPortion, height, padding, row, spacing, text, width)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
+import FontAwesome.Icon exposing (Icon, viewIcon)
+import FontAwesome.Solid as Solid
+import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
@@ -29,7 +35,14 @@ type alias Model =
     { game : PacoPosition
     , drag : DragState
     , windowSize : ( Int, Int )
+    , tool : EditorTool
     }
+
+
+type EditorTool
+    = MoveTool
+    | DeleteTool
+    | CreateTool
 
 
 type alias PacoPosition =
@@ -143,6 +156,7 @@ type Msg
     | MouseUp Mouse.Event
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
     | WindowResize Int Int
+    | ToolSelect EditorTool
 
 
 initialModel : Decode.Value -> Model
@@ -150,6 +164,7 @@ initialModel flags =
     { game = initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
+    , tool = DeleteTool
     }
 
 
@@ -200,6 +215,9 @@ update msg model =
         WindowResize width height ->
             ( { model | windowSize = ( width, height ) }, Cmd.none )
 
+        ToolSelect tool ->
+            ( { model | tool = tool }, Cmd.none )
+
 
 subscriptions : model -> Sub Msg
 subscriptions _ =
@@ -219,7 +237,8 @@ view model =
 ui : Model -> Element Msg
 ui model =
     Element.row [ width fill, height fill ]
-        [ positionView model model.game model.drag
+        [ Element.html FontAwesome.Styles.css
+        , positionView model model.game model.drag
         , sidebar model
         ]
 
@@ -257,8 +276,74 @@ sidebar model =
     Element.column [ width fill, height fill, spacing 10 ]
         [ Element.text "Paco Ŝako Puzzle"
         , Element.text "Sidebar"
-        , Element.text <| Debug.toString model.windowSize
+        , toolSelection model.tool
         ]
+
+
+toolSelection : EditorTool -> Element Msg
+toolSelection tool =
+    Element.row [ width fill ]
+        [ moveToolButton tool
+        , deleteToolButton tool
+        , createToolButton tool
+        ]
+
+
+moveToolButton : EditorTool -> Element Msg
+moveToolButton tool =
+    Element.row
+        [ width (fillPortion 1)
+        , spacing 5
+        , padding 5
+        , Border.color (Element.rgb255 0 0 0)
+        , Border.width 1
+        , backgroundFocus (tool == MoveTool)
+        , Events.onClick (ToolSelect MoveTool)
+        ]
+        [ icon [] Solid.arrowsAlt
+        , Element.text "Move Piece"
+        ]
+
+
+deleteToolButton : EditorTool -> Element Msg
+deleteToolButton tool =
+    Element.row
+        [ width (fillPortion 1)
+        , spacing 5
+        , padding 5
+        , Border.color (Element.rgb255 0 0 0)
+        , Border.width 1
+        , backgroundFocus (tool == DeleteTool)
+        , Events.onClick (ToolSelect DeleteTool)
+        ]
+        [ icon [] Solid.trash
+        , Element.text "Delete Piece"
+        ]
+
+
+createToolButton : EditorTool -> Element Msg
+createToolButton tool =
+    Element.row
+        [ width (fillPortion 1)
+        , spacing 5
+        , padding 5
+        , Border.color (Element.rgb255 0 0 0)
+        , Border.width 1
+        , backgroundFocus (tool == CreateTool)
+        , Events.onClick (ToolSelect CreateTool)
+        ]
+        [ icon [] Solid.chess
+        , Element.text "Add Piece"
+        ]
+
+
+backgroundFocus : Bool -> Element.Attribute msg
+backgroundFocus isFocused =
+    if isFocused then
+        Background.color (Element.rgb255 200 200 200)
+
+    else
+        Background.color (Element.rgb255 255 255 255)
 
 
 boardViewBox : Rect
@@ -446,3 +531,8 @@ dragHints drag =
                     ]
                     []
                 ]
+
+
+icon : List (Element.Attribute msg) -> Icon -> Element msg
+icon attributes iconType =
+    Element.el attributes (Element.html (viewIcon iconType))
