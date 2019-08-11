@@ -254,7 +254,37 @@ positionSvg sideLength _ drag =
         [ board
         , dragHints drag
         , Svg.g [ Svg.Attributes.transform "translate(300, 600)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(300, 600)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Rock Sako.White
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(600, 600)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(600, 600)" ]
             [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.White
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(300, 100)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Pawn Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(400, 100)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Rock Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(500, 300)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Knight Sako.White
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(400, 300)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Bishop Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(400, 300)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Queen Sako.White
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(400, 700)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.Queen Sako.Black
+            ]
+        , Svg.g [ Svg.Attributes.transform "translate(400, 700)" ]
+            [ Pieces.figure Pieces.defaultColorScheme Sako.King Sako.White
             ]
         ]
 
