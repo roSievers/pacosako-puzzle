@@ -313,8 +313,18 @@ positionSvg sideLength pacoPosition drag =
 piecesSvg : PacoPosition -> Svg msg
 piecesSvg pacoPosition =
     pacoPosition.pieces
+        |> sortBlacksFirst
         |> List.map pieceSvg
         |> Svg.g []
+
+
+{-| When rendering a union the black piece must appear below the white piece. Reorder the pieces
+to make this happen.
+-}
+sortBlacksFirst : List PacoPiece -> List PacoPiece
+sortBlacksFirst pieces =
+    List.filter (\piece -> piece.color == Sako.Black) pieces
+        ++ List.filter (\piece -> piece.color == Sako.White) pieces
 
 
 pieceSvg : PacoPiece -> Svg msg
