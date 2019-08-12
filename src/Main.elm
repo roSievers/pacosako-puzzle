@@ -105,14 +105,18 @@ initialPosition =
 
 type DragState
     = DragOff
-    | Dragging { start : ( Float, Float ), current : ( Float, Float ), rect : Rect }
+    | Dragging { start : ( Int, Int ), current : ( Int, Int ), rect : Rect }
 
 
 startDrag : Rect -> Mouse.Event -> DragState
 startDrag element event =
+    let
+        start =
+            gameSpaceCoordinate element realizedBoardViewBox event.clientPos
+    in
     Dragging
-        { start = substract event.clientPos ( element.x, element.y )
-        , current = substract event.clientPos ( element.x, element.y )
+        { start = start
+        , current = start
         , rect = element
         }
 
@@ -124,12 +128,11 @@ moveDrag event drag =
             DragOff
 
         Dragging { start, rect } ->
-            Dragging { start = start, current = substract event.clientPos ( rect.x, rect.y ), rect = rect }
-
-
-substract : ( Float, Float ) -> ( Float, Float ) -> ( Float, Float )
-substract ( x, y ) ( dx, dy ) =
-    ( x - dx, y - dy )
+            Dragging
+                { start = start
+                , current = gameSpaceCoordinate rect realizedBoardViewBox event.clientPos
+                , rect = rect
+                }
 
 
 relativeInside : Rect -> ( Float, Float ) -> ( Float, Float )
@@ -140,6 +143,28 @@ relativeInside rect ( x, y ) =
 absoluteOutside : Rect -> ( Float, Float ) -> ( Float, Float )
 absoluteOutside rect ( x, y ) =
     ( x * rect.width + rect.x, y * rect.height + rect.y )
+
+
+roundTuple : ( Float, Float ) -> ( Int, Int )
+roundTuple ( x, y ) =
+    ( round x, round y )
+
+
+{-| Transforms a screen space coordinate into a Svg coordinate.
+-}
+gameSpaceCoordinate : Rect -> Rect -> ( Float, Float ) -> ( Int, Int )
+gameSpaceCoordinate elementRect gameView coord =
+    coord
+        |> relativeInside elementRect
+        |> absoluteOutside gameView
+        |> roundTuple
+
+
+{-| Transforms an Svg coordinate into a logical tile coordinate.
+-}
+tileCoordinate : ( Int, Int ) -> ( Int, Int )
+tileCoordinate ( x, y ) =
+    ( x // 100, 7 - y // 100 )
 
 
 type alias Rect =
@@ -201,8 +226,17 @@ update msg model =
         MouseMove event ->
             ( { model | drag = moveDrag event model.drag }, Cmd.none )
 
-        MouseUp _ ->
-            ( { model | drag = DragOff }, Cmd.none )
+        MouseUp event ->
+            let
+                drag =
+                    moveDrag event model.drag
+            in
+            case drag of
+                DragOff ->
+                    ( { model | drag = DragOff }, Cmd.none )
+
+                Dragging dragData ->
+                    clickRelease dragData.start dragData.current { model | drag = DragOff }
 
         GotBoardPosition res event ->
             case res of
@@ -217,6 +251,22 @@ update msg model =
 
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
+
+
+clickRelease : ( Int, Int ) -> ( Int, Int ) -> Model -> ( Model, Cmd Msg )
+clickRelease down up model =
+    let
+        coordUp =
+            tileCoordinate up
+
+        coordDown =
+            tileCoordinate down
+    in
+    if coordUp == coordDown then
+        ( { model | game = model.game |> (\g -> { g | pieces = g.pieces |> List.filter (\p -> p.position /= coordUp) }) }, Cmd.none )
+
+    else
+        ( model, Cmd.none )
 
 
 subscriptions : model -> Sub Msg
@@ -503,29 +553,25 @@ dragHints drag =
         DragOff ->
             Svg.g [] []
 
-        Dragging { start, current, rect } ->
+        Dragging { start, current } ->
             let
                 ( sx, sy ) =
                     start
-                        |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside realizedBoardViewBox
 
                 ( cx, cy ) =
                     current
-                        |> relativeInside { rect | x = 0, y = 0 }
-                        |> absoluteOutside realizedBoardViewBox
             in
             Svg.g []
                 [ Svg.circle
-                    [ Svg.Attributes.cx (String.fromFloat sx)
-                    , Svg.Attributes.cy (String.fromFloat sy)
+                    [ Svg.Attributes.cx (String.fromInt sx)
+                    , Svg.Attributes.cy (String.fromInt sy)
                     , Svg.Attributes.r "30"
                     , Svg.Attributes.fill "#F00"
                     ]
                     []
                 , Svg.circle
-                    [ Svg.Attributes.cx (String.fromFloat cx)
-                    , Svg.Attributes.cy (String.fromFloat cy)
+                    [ Svg.Attributes.cx (String.fromInt cx)
+                    , Svg.Attributes.cy (String.fromInt cy)
                     , Svg.Attributes.r "30"
                     , Svg.Attributes.fill "#0F0"
                     ]
