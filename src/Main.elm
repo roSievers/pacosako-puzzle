@@ -15,6 +15,7 @@ import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
 import Pieces
+import Pivot as P exposing (Pivot)
 import Sako
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -32,7 +33,7 @@ main =
 
 
 type alias Model =
-    { game : PacoPosition
+    { game : Pivot PacoPosition
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
@@ -100,6 +101,13 @@ initialPosition =
         , pacoPiece Sako.Black Sako.Knight ( 6, 7 )
         , pacoPiece Sako.Black Sako.Rock ( 7, 7 )
         ]
+    }
+
+
+emptyPosition : PacoPosition
+emptyPosition =
+    { moveNumber = 0
+    , pieces = []
     }
 
 
@@ -182,11 +190,14 @@ type Msg
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
     | WindowResize Int Int
     | ToolSelect EditorTool
+    | Undo
+    | Redo
+    | Reset PacoPosition
 
 
 initialModel : Decode.Value -> Model
 initialModel flags =
-    { game = initialPosition
+    { game = P.singleton initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = DeleteTool
@@ -252,6 +263,15 @@ update msg model =
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
 
+        Undo ->
+            ( { model | game = P.withRollback P.goL model.game }, Cmd.none )
+
+        Redo ->
+            ( { model | game = P.withRollback P.goR model.game }, Cmd.none )
+
+        Reset newPosition ->
+            ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+
 
 clickRelease : ( Int, Int ) -> ( Int, Int ) -> Model -> ( Model, Cmd Msg )
 clickRelease down up model =
@@ -261,12 +281,33 @@ clickRelease down up model =
 
         coordDown =
             tileCoordinate down
+
+        oldPosition =
+            P.getC model.game
+
+        newPosition =
+            { oldPosition | pieces = List.filter (\p -> p.position /= coordUp) oldPosition.pieces }
+
+        newHistory =
+            addHistoryState newPosition model.game
     in
     if coordUp == coordDown then
-        ( { model | game = model.game |> (\g -> { g | pieces = g.pieces |> List.filter (\p -> p.position /= coordUp) }) }, Cmd.none )
+        ( { model | game = newHistory }, Cmd.none )
 
     else
         ( model, Cmd.none )
+
+
+{-| Adds a new state, storing the current state in the history. If there currently is a redo chain
+it is discarded.
+-}
+addHistoryState : a -> Pivot a -> Pivot a
+addHistoryState newState p =
+    if P.getC p == newState then
+        p
+
+    else
+        p |> P.setR [] |> P.appendGoR newState
 
 
 subscriptions : model -> Sub Msg
@@ -288,7 +329,7 @@ ui : Model -> Element Msg
 ui model =
     Element.row [ width fill, height fill ]
         [ Element.html FontAwesome.Styles.css
-        , positionView model model.game model.drag
+        , positionView model (P.getC model.game) model.drag
         , sidebar model
         ]
 
@@ -326,8 +367,36 @@ sidebar model =
     Element.column [ width fill, height fill, spacing 10 ]
         [ Element.text "Paco Ŝako Puzzle"
         , Element.text "Sidebar"
+        , Element.el [ Events.onClick (Reset initialPosition) ]
+            (Element.text "Reset to starting position.")
+        , Element.el [ Events.onClick (Reset emptyPosition) ]
+            (Element.text "Clear board.")
+        , undo model.game
+        , redo model.game
         , toolSelection model.tool
         ]
+
+
+{-| The undo button.
+-}
+undo : Pivot a -> Element Msg
+undo p =
+    if P.hasL p then
+        Element.el [ Events.onClick Undo ] (Element.text "Undo")
+
+    else
+        Element.text "Can't undo."
+
+
+{-| The redo button.
+-}
+redo : Pivot a -> Element Msg
+redo p =
+    if P.hasR p then
+        Element.el [ Events.onClick Redo ] (Element.text "Redo")
+
+    else
+        Element.text "Can't redo."
 
 
 toolSelection : EditorTool -> Element Msg
