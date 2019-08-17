@@ -55,11 +55,45 @@ type alias PacoPosition =
 type alias PacoPiece =
     { pieceType : Sako.Piece
     , color : Sako.Color
-    , position : ( Int, Int )
+    , position : Tile
     }
 
 
-pacoPiece : Sako.Color -> Sako.Piece -> ( Int, Int ) -> PacoPiece
+{-| Represents a single board tile. `Tile x y` stores two integers with legal values between 0
+and 7 (inclusive). Use `tileX` and `tileY` to extract individual coordinates.
+-}
+type Tile
+    = Tile Int Int
+
+
+tileX : Tile -> Int
+tileX (Tile x _) =
+    x
+
+
+tileY : Tile -> Int
+tileY (Tile _ y) =
+    y
+
+
+{-| Represents a point in the Svg coordinate space. The game board is rendered from 0 to 800 in
+both directions but additional objects are rendered outside.
+-}
+type SvgCoord
+    = SvgCoord Int Int
+
+
+svgX : SvgCoord -> Int
+svgX (SvgCoord x _) =
+    x
+
+
+svgY : SvgCoord -> Int
+svgY (SvgCoord _ y) =
+    y
+
+
+pacoPiece : Sako.Color -> Sako.Piece -> Tile -> PacoPiece
 pacoPiece color pieceType position =
     { pieceType = pieceType, color = color, position = position }
 
@@ -68,38 +102,38 @@ initialPosition : PacoPosition
 initialPosition =
     { moveNumber = 0
     , pieces =
-        [ pacoPiece Sako.White Sako.Rock ( 0, 0 )
-        , pacoPiece Sako.White Sako.Knight ( 1, 0 )
-        , pacoPiece Sako.White Sako.Bishop ( 2, 0 )
-        , pacoPiece Sako.White Sako.Queen ( 3, 0 )
-        , pacoPiece Sako.White Sako.King ( 4, 0 )
-        , pacoPiece Sako.White Sako.Bishop ( 5, 0 )
-        , pacoPiece Sako.White Sako.Knight ( 6, 0 )
-        , pacoPiece Sako.White Sako.Rock ( 7, 0 )
-        , pacoPiece Sako.White Sako.Pawn ( 0, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 1, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 2, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 3, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 4, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 5, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 6, 1 )
-        , pacoPiece Sako.White Sako.Pawn ( 7, 1 )
-        , pacoPiece Sako.Black Sako.Pawn ( 0, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 1, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 2, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 3, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 4, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 5, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 6, 6 )
-        , pacoPiece Sako.Black Sako.Pawn ( 7, 6 )
-        , pacoPiece Sako.Black Sako.Rock ( 0, 7 )
-        , pacoPiece Sako.Black Sako.Knight ( 1, 7 )
-        , pacoPiece Sako.Black Sako.Bishop ( 2, 7 )
-        , pacoPiece Sako.Black Sako.Queen ( 3, 7 )
-        , pacoPiece Sako.Black Sako.King ( 4, 7 )
-        , pacoPiece Sako.Black Sako.Bishop ( 5, 7 )
-        , pacoPiece Sako.Black Sako.Knight ( 6, 7 )
-        , pacoPiece Sako.Black Sako.Rock ( 7, 7 )
+        [ pacoPiece Sako.White Sako.Rock (Tile 0 0)
+        , pacoPiece Sako.White Sako.Knight (Tile 1 0)
+        , pacoPiece Sako.White Sako.Bishop (Tile 2 0)
+        , pacoPiece Sako.White Sako.Queen (Tile 3 0)
+        , pacoPiece Sako.White Sako.King (Tile 4 0)
+        , pacoPiece Sako.White Sako.Bishop (Tile 5 0)
+        , pacoPiece Sako.White Sako.Knight (Tile 6 0)
+        , pacoPiece Sako.White Sako.Rock (Tile 7 0)
+        , pacoPiece Sako.White Sako.Pawn (Tile 0 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 1 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 2 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 3 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 4 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 5 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 6 1)
+        , pacoPiece Sako.White Sako.Pawn (Tile 7 1)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 0 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 1 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 2 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 3 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 4 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 5 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 6 6)
+        , pacoPiece Sako.Black Sako.Pawn (Tile 7 6)
+        , pacoPiece Sako.Black Sako.Rock (Tile 0 7)
+        , pacoPiece Sako.Black Sako.Knight (Tile 1 7)
+        , pacoPiece Sako.Black Sako.Bishop (Tile 2 7)
+        , pacoPiece Sako.Black Sako.Queen (Tile 3 7)
+        , pacoPiece Sako.Black Sako.King (Tile 4 7)
+        , pacoPiece Sako.Black Sako.Bishop (Tile 5 7)
+        , pacoPiece Sako.Black Sako.Knight (Tile 6 7)
+        , pacoPiece Sako.Black Sako.Rock (Tile 7 7)
         ]
     }
 
@@ -113,7 +147,7 @@ emptyPosition =
 
 type DragState
     = DragOff
-    | Dragging { start : ( Int, Int ), current : ( Int, Int ), rect : Rect }
+    | Dragging { start : SvgCoord, current : SvgCoord, rect : Rect }
 
 
 startDrag : Rect -> Mouse.Event -> DragState
@@ -160,19 +194,20 @@ roundTuple ( x, y ) =
 
 {-| Transforms a screen space coordinate into a Svg coordinate.
 -}
-gameSpaceCoordinate : Rect -> Rect -> ( Float, Float ) -> ( Int, Int )
+gameSpaceCoordinate : Rect -> Rect -> ( Float, Float ) -> SvgCoord
 gameSpaceCoordinate elementRect gameView coord =
     coord
         |> relativeInside elementRect
         |> absoluteOutside gameView
         |> roundTuple
+        |> (\( x, y ) -> SvgCoord x y)
 
 
 {-| Transforms an Svg coordinate into a logical tile coordinate.
 -}
-tileCoordinate : ( Int, Int ) -> ( Int, Int )
-tileCoordinate ( x, y ) =
-    ( x // 100, 7 - y // 100 )
+tileCoordinate : SvgCoord -> Tile
+tileCoordinate (SvgCoord x y) =
+    Tile (x // 100) (7 - y // 100)
 
 
 type alias Rect =
@@ -273,7 +308,7 @@ update msg model =
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
 
-clickRelease : ( Int, Int ) -> ( Int, Int ) -> Model -> ( Model, Cmd Msg )
+clickRelease : SvgCoord -> SvgCoord -> Model -> ( Model, Cmd Msg )
 clickRelease down up model =
     let
         coordUp =
@@ -534,15 +569,12 @@ sortBlacksFirst pieces =
 pieceSvg : PacoPiece -> Svg msg
 pieceSvg piece =
     let
-        ( x, y ) =
-            piece.position
-
         transform =
             Svg.Attributes.transform
                 ("translate("
-                    ++ String.fromInt (100 * x)
+                    ++ String.fromInt (100 * tileX piece.position)
                     ++ ", "
-                    ++ String.fromInt (700 - 100 * y)
+                    ++ String.fromInt (700 - 100 * tileY piece.position)
                     ++ ")"
                 )
     in
@@ -623,24 +655,17 @@ dragHints drag =
             Svg.g [] []
 
         Dragging { start, current } ->
-            let
-                ( sx, sy ) =
-                    start
-
-                ( cx, cy ) =
-                    current
-            in
             Svg.g []
                 [ Svg.circle
-                    [ Svg.Attributes.cx (String.fromInt sx)
-                    , Svg.Attributes.cy (String.fromInt sy)
+                    [ Svg.Attributes.cx <| String.fromInt <| svgX start
+                    , Svg.Attributes.cy <| String.fromInt <| svgY start
                     , Svg.Attributes.r "30"
                     , Svg.Attributes.fill "#F00"
                     ]
                     []
                 , Svg.circle
-                    [ Svg.Attributes.cx (String.fromInt cx)
-                    , Svg.Attributes.cy (String.fromInt cy)
+                    [ Svg.Attributes.cx <| String.fromInt <| svgX current
+                    , Svg.Attributes.cy <| String.fromInt <| svgY current
                     , Svg.Attributes.r "30"
                     , Svg.Attributes.fill "#0F0"
                     ]
