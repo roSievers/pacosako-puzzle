@@ -38,6 +38,7 @@ type alias Model =
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
+    , moveToolColor : Maybe Sako.Color
     }
 
 
@@ -226,6 +227,7 @@ type Msg
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
     | WindowResize Int Int
     | ToolSelect EditorTool
+    | MoveToolFilter (Maybe Sako.Color)
     | Undo
     | Redo
     | Reset PacoPosition
@@ -237,6 +239,7 @@ initialModel flags =
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = DeleteTool
+    , moveToolColor = Nothing
     }
 
 
@@ -299,6 +302,9 @@ update msg model =
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
 
+        MoveToolFilter colorFilter ->
+            ( { model | moveToolColor = colorFilter }, Cmd.none )
+
         Undo ->
             ( { model | game = P.withRollback P.goL model.game }, Cmd.none )
 
@@ -354,15 +360,20 @@ moveToolRelease down up model =
         oldPosition =
             P.getC model.game
 
+        colorFilter =
+            model.moveToolColor
+                |> Maybe.map (\color piece -> piece.color == color)
+                |> Maybe.withDefault (\_ -> True)
+
         moveAction piece =
-            if piece.position == down then
+            if piece.position == down && colorFilter piece then
                 { piece | position = up }
 
             else
                 piece
 
         involvedPieces =
-            List.filter (\p -> p.position == down || p.position == up) oldPosition.pieces
+            List.filter (\p -> (p.position == down || p.position == up) && colorFilter p) oldPosition.pieces
 
         ( whiteCount, blackCount ) =
             ( List.count (\p -> p.color == Sako.White) involvedPieces
@@ -457,7 +468,7 @@ sidebar model =
             (Element.text "Clear board.")
         , undo model.game
         , redo model.game
-        , toolSelection model.tool
+        , toolConfig model
         ]
 
 
@@ -483,8 +494,25 @@ redo p =
         Element.text "Can't redo."
 
 
-toolSelection : EditorTool -> Element Msg
-toolSelection tool =
+toolConfig : Model -> Element Msg
+toolConfig model =
+    let
+        toolBody =
+            case model.tool of
+                MoveTool ->
+                    moveToolConfig model
+
+                _ ->
+                    Element.none
+    in
+    Element.column [ width fill ]
+        [ toolHeader model.tool
+        , toolBody
+        ]
+
+
+toolHeader : EditorTool -> Element Msg
+toolHeader tool =
     Element.row [ width fill ]
         [ moveToolButton tool
         , deleteToolButton tool
@@ -547,6 +575,25 @@ backgroundFocus isFocused =
 
     else
         Background.color (Element.rgb255 255 255 255)
+
+
+moveToolConfigOption : Maybe Sako.Color -> Maybe Sako.Color -> String -> Element Msg
+moveToolConfigOption current buttonValue caption =
+    Element.el
+        [ Events.onClick (MoveToolFilter buttonValue)
+        , backgroundFocus (current == buttonValue)
+        , padding 5
+        ]
+        (Element.text caption)
+
+
+moveToolConfig : Model -> Element Msg
+moveToolConfig model =
+    Element.row [ width fill ]
+        [ moveToolConfigOption model.moveToolColor Nothing "all pieces"
+        , moveToolConfigOption model.moveToolColor (Just Sako.White) "white pieces"
+        , moveToolConfigOption model.moveToolColor (Just Sako.Black) "black pieces"
+        ]
 
 
 boardViewBox : Rect
