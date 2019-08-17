@@ -2,10 +2,19 @@ module Pieces exposing
     ( ColorScheme
     , SideColor
     , blackPieceColor
+    , bluePieceColor
+    , colorUi
     , defaultColorScheme
     , figure
+    , greenPieceColor
+    , orangePieceColor
+    , pinkPieceColor
+    , purplePieceColor
     , redPieceColor
+    , setBlack
+    , setWhite
     , whitePieceColor
+    , yellowPieceColor
     )
 
 {-| The LICENSE file does not apply to this file!
@@ -15,6 +24,7 @@ with permission from Felix Albers.
 
 -}
 
+import Element
 import Sako
 import Svg exposing (Attribute, Svg)
 import Svg.Attributes exposing (d)
@@ -47,8 +57,8 @@ on the Paco Ŝako website.
 
 -}
 type alias SideColor =
-    { fill : String
-    , stroke : String
+    { fill : ( Int, Int, Int )
+    , stroke : ( Int, Int, Int )
     }
 
 
@@ -58,6 +68,16 @@ type alias ColorScheme =
     { white : SideColor
     , black : SideColor
     }
+
+
+setWhite : SideColor -> ColorScheme -> ColorScheme
+setWhite c s =
+    { s | white = c }
+
+
+setBlack : SideColor -> ColorScheme -> ColorScheme
+setBlack c s =
+    { s | black = c }
 
 
 {-| White pieces for the white player, black pieces for the black player.
@@ -71,17 +91,47 @@ defaultColorScheme =
 
 whitePieceColor : SideColor
 whitePieceColor =
-    { fill = "#FFF", stroke = "#000" }
+    { fill = ( 255, 255, 255 ), stroke = ( 0, 0, 0 ) }
 
 
 redPieceColor : SideColor
 redPieceColor =
-    { fill = "#F44", stroke = "#933" }
+    { fill = ( 255, 50, 50 ), stroke = ( 150, 50, 50 ) }
+
+
+orangePieceColor : SideColor
+orangePieceColor =
+    { fill = ( 255, 150, 50 ), stroke = ( 150, 100, 50 ) }
+
+
+yellowPieceColor : SideColor
+yellowPieceColor =
+    { fill = ( 255, 255, 50 ), stroke = ( 150, 150, 50 ) }
+
+
+greenPieceColor : SideColor
+greenPieceColor =
+    { fill = ( 50, 255, 50 ), stroke = ( 50, 150, 50 ) }
+
+
+bluePieceColor : SideColor
+bluePieceColor =
+    { fill = ( 50, 50, 255 ), stroke = ( 50, 50, 150 ) }
+
+
+purplePieceColor : SideColor
+purplePieceColor =
+    { fill = ( 150, 0, 255 ), stroke = ( 140, 0, 150 ) }
+
+
+pinkPieceColor : SideColor
+pinkPieceColor =
+    { fill = ( 255, 50, 255 ), stroke = ( 150, 50, 150 ) }
 
 
 blackPieceColor : SideColor
 blackPieceColor =
-    { fill = "#333", stroke = "#000" }
+    { fill = ( 50, 50, 50 ), stroke = ( 0, 0, 0 ) }
 
 
 blackTransform : Svg.Attribute msg
@@ -89,17 +139,27 @@ blackTransform =
     Svg.Attributes.transform "translate(100, 0) scale(-1, 1)"
 
 
+colorString : ( Int, Int, Int ) -> String
+colorString ( r, g, b ) =
+    String.join "" [ "rgb(", String.fromInt r, ",", String.fromInt g, ",", String.fromInt b, ")" ]
+
+
+colorUi : ( Int, Int, Int ) -> Element.Color
+colorUi ( r, g, b ) =
+    Element.rgb255 r g b
+
+
 colorAttributes : ColorScheme -> Sako.Color -> List (Svg.Attribute msg)
 colorAttributes scheme color =
     case color of
         Sako.White ->
-            [ Svg.Attributes.fill scheme.white.fill
-            , Svg.Attributes.stroke scheme.white.stroke
+            [ Svg.Attributes.fill (colorString scheme.white.fill)
+            , Svg.Attributes.stroke (colorString scheme.white.stroke)
             ]
 
         Sako.Black ->
-            [ Svg.Attributes.fill scheme.black.fill
-            , Svg.Attributes.stroke scheme.black.stroke
+            [ Svg.Attributes.fill (colorString scheme.black.fill)
+            , Svg.Attributes.stroke (colorString scheme.black.stroke)
             , blackTransform
             ]
 

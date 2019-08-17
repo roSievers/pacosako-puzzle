@@ -7,6 +7,7 @@ import Element exposing (Element, centerX, centerY, el, fill, fillPortion, heigh
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
+import Element.Font as Font
 import FontAwesome.Icon exposing (Icon, viewIcon)
 import FontAwesome.Solid as Solid
 import FontAwesome.Styles
@@ -35,6 +36,7 @@ main =
 
 type alias Model =
     { game : Pivot PacoPosition
+    , colorScheme : Pieces.ColorScheme
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
@@ -231,14 +233,17 @@ type Msg
     | Undo
     | Redo
     | Reset PacoPosition
+    | WhiteSideColor Pieces.SideColor
+    | BlackSideColor Pieces.SideColor
 
 
 initialModel : Decode.Value -> Model
 initialModel flags =
     { game = P.singleton initialPosition
+    , colorScheme = Pieces.defaultColorScheme
     , drag = DragOff
     , windowSize = parseWindowSize flags
-    , tool = DeleteTool
+    , tool = MoveTool
     , moveToolColor = Nothing
     }
 
@@ -313,6 +318,12 @@ update msg model =
 
         Reset newPosition ->
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+
+        WhiteSideColor newSideColor ->
+            ( { model | colorScheme = Pieces.setWhite newSideColor model.colorScheme }, Cmd.none )
+
+        BlackSideColor newSideColor ->
+            ( { model | colorScheme = Pieces.setBlack newSideColor model.colorScheme }, Cmd.none )
 
 
 {-| TODO: Currently the tools are "History aware", this can be removed. It will make the plumbing
@@ -451,7 +462,7 @@ positionView model position drag =
                     , Mouse.onUp MouseUp
                     , Html.Attributes.id "boardDiv"
                     ]
-                    [ positionSvg (windowHeight - windowSafetyMargin) position drag ]
+                    [ positionSvg model.colorScheme (windowHeight - windowSafetyMargin) position drag ]
                 )
             )
         )
@@ -469,6 +480,8 @@ sidebar model =
         , undo model.game
         , redo model.game
         , toolConfig model
+        , colorSchemeConfigWhite model
+        , colorSchemeConfigBlack model
         ]
 
 
@@ -513,7 +526,7 @@ toolConfig model =
 
 toolHeader : EditorTool -> Element Msg
 toolHeader tool =
-    Element.row [ width fill ]
+    Element.wrappedRow [ width fill ]
         [ moveToolButton tool
         , deleteToolButton tool
         , createToolButton tool
@@ -596,6 +609,63 @@ moveToolConfig model =
         ]
 
 
+colorPicker : (Pieces.SideColor -> msg) -> Pieces.SideColor -> Pieces.SideColor -> String -> Element msg
+colorPicker msg currentColor newColor colorName =
+    let
+        baseAttributes =
+            [ width fill
+            , padding 5
+            , Events.onClick (msg newColor)
+            , Background.color (Pieces.colorUi newColor.fill)
+            , Border.color (Pieces.colorUi newColor.stroke)
+            ]
+
+        selectionAttributes =
+            if currentColor == newColor then
+                [ Border.width 4, Font.bold ]
+
+            else
+                [ Border.width 2 ]
+    in
+    Element.el (baseAttributes ++ selectionAttributes) (Element.text colorName)
+
+
+colorSchemeConfigWhite : Model -> Element Msg
+colorSchemeConfigWhite model =
+    Element.wrappedRow [ spacing 2 ]
+        [ Element.text "White pieces: "
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.whitePieceColor "white"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.redPieceColor "red"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.orangePieceColor "orange"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.yellowPieceColor "yellow"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.greenPieceColor "green"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.bluePieceColor "blue"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.purplePieceColor "purple"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.pinkPieceColor "pink"
+        , colorPicker WhiteSideColor model.colorScheme.white Pieces.blackPieceColor "black"
+        ]
+
+
+colorSchemeConfigBlack : Model -> Element Msg
+colorSchemeConfigBlack model =
+    Element.wrappedRow [ spacing 2 ]
+        [ Element.text "Black pieces: "
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.whitePieceColor "white"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.redPieceColor "red"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.orangePieceColor "orange"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.yellowPieceColor "yellow"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.greenPieceColor "green"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.bluePieceColor "blue"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.purplePieceColor "purple"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.pinkPieceColor "pink"
+        , colorPicker BlackSideColor model.colorScheme.black Pieces.blackPieceColor "black"
+        ]
+
+
+
+--- End of the sidebar view code ---
+
+
 boardViewBox : Rect
 boardViewBox =
     { x = -70 -- -70
@@ -632,8 +702,8 @@ viewBox rect =
         |> Svg.Attributes.viewBox
 
 
-positionSvg : Int -> PacoPosition -> DragState -> Html Msg
-positionSvg sideLength pacoPosition drag =
+positionSvg : Pieces.ColorScheme -> Int -> PacoPosition -> DragState -> Html Msg
+positionSvg colorScheme sideLength pacoPosition drag =
     Svg.svg
         [ Svg.Attributes.width <| String.fromInt sideLength
         , Svg.Attributes.height <| String.fromInt sideLength
@@ -641,15 +711,15 @@ positionSvg sideLength pacoPosition drag =
         ]
         [ board
         , dragHints drag
-        , piecesSvg pacoPosition
+        , piecesSvg colorScheme pacoPosition
         ]
 
 
-piecesSvg : PacoPosition -> Svg msg
-piecesSvg pacoPosition =
+piecesSvg : Pieces.ColorScheme -> PacoPosition -> Svg msg
+piecesSvg colorScheme pacoPosition =
     pacoPosition.pieces
         |> sortBlacksFirst
-        |> List.map pieceSvg
+        |> List.map (pieceSvg colorScheme)
         |> Svg.g []
 
 
@@ -662,8 +732,8 @@ sortBlacksFirst pieces =
         ++ List.filter (\piece -> piece.color == Sako.White) pieces
 
 
-pieceSvg : PacoPiece -> Svg msg
-pieceSvg piece =
+pieceSvg : Pieces.ColorScheme -> PacoPiece -> Svg msg
+pieceSvg colorScheme piece =
     let
         transform =
             Svg.Attributes.transform
@@ -675,7 +745,7 @@ pieceSvg piece =
                 )
     in
     Svg.g [ transform ]
-        [ Pieces.figure Pieces.defaultColorScheme piece.pieceType piece.color
+        [ Pieces.figure colorScheme piece.pieceType piece.color
         ]
 
 
