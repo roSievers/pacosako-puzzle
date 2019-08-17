@@ -14,6 +14,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
+import List.Extra as List
 import Pieces
 import Pivot as P exposing (Pivot)
 import Sako
@@ -308,26 +309,74 @@ update msg model =
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
 
+{-| TODO: Currently the tools are "History aware", this can be removed. It will make the plumbing
+around the tools more complicated but will allow easier tools.
+
+They may still need a lower level of history awareness where they can indicate if the current game
+state is meant as a preview or an invalid ephemeral display state that should not be preserved.
+
+-}
 clickRelease : SvgCoord -> SvgCoord -> Model -> ( Model, Cmd Msg )
 clickRelease down up model =
+    case model.tool of
+        DeleteTool ->
+            deleteToolRelease (tileCoordinate down) (tileCoordinate up) model
+
+        MoveTool ->
+            moveToolRelease (tileCoordinate down) (tileCoordinate up) model
+
+        CreateTool ->
+            ( model, Cmd.none )
+
+
+deleteToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+deleteToolRelease down up model =
     let
-        coordUp =
-            tileCoordinate up
-
-        coordDown =
-            tileCoordinate down
-
         oldPosition =
             P.getC model.game
 
         newPosition =
-            { oldPosition | pieces = List.filter (\p -> p.position /= coordUp) oldPosition.pieces }
+            { oldPosition | pieces = List.filter (\p -> p.position /= up) oldPosition.pieces }
 
         newHistory =
             addHistoryState newPosition model.game
     in
-    if coordUp == coordDown then
+    if up == down then
         ( { model | game = newHistory }, Cmd.none )
+
+    else
+        ( model, Cmd.none )
+
+
+moveToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+moveToolRelease down up model =
+    let
+        oldPosition =
+            P.getC model.game
+
+        moveAction piece =
+            if piece.position == down then
+                { piece | position = up }
+
+            else
+                piece
+
+        involvedPieces =
+            List.filter (\p -> p.position == down || p.position == up) oldPosition.pieces
+
+        ( whiteCount, blackCount ) =
+            ( List.count (\p -> p.color == Sako.White) involvedPieces
+            , List.count (\p -> p.color == Sako.Black) involvedPieces
+            )
+
+        newPosition _ =
+            { oldPosition | pieces = List.map moveAction oldPosition.pieces }
+
+        newHistory _ =
+            addHistoryState (newPosition ()) model.game
+    in
+    if whiteCount <= 1 && blackCount <= 1 then
+        ( { model | game = newHistory () }, Cmd.none )
 
     else
         ( model, Cmd.none )
