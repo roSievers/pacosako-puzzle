@@ -42,6 +42,8 @@ type alias Model =
     , tool : EditorTool
     , moveToolColor : Maybe Sako.Color
     , deleteToolColor : Maybe Sako.Color
+    , createToolColor : Sako.Color
+    , createToolType : Sako.Piece
     }
 
 
@@ -232,6 +234,8 @@ type Msg
     | ToolSelect EditorTool
     | MoveToolFilter (Maybe Sako.Color)
     | DeleteToolFilter (Maybe Sako.Color)
+    | CreateToolColor Sako.Color
+    | CreateToolType Sako.Piece
     | Undo
     | Redo
     | Reset PacoPosition
@@ -256,6 +260,8 @@ initialModel flags =
     , tool = MoveTool
     , moveToolColor = Nothing
     , deleteToolColor = Nothing
+    , createToolColor = Sako.White
+    , createToolType = Sako.Pawn
     }
 
 
@@ -323,6 +329,12 @@ update msg model =
 
         DeleteToolFilter newColor ->
             ( { model | deleteToolColor = newColor }, Cmd.none )
+
+        CreateToolColor newColor ->
+            ( { model | createToolColor = newColor }, Cmd.none )
+
+        CreateToolType newType ->
+            ( { model | createToolType = newType }, Cmd.none )
 
         Undo ->
             ( applyUndo model, Cmd.none )
@@ -396,7 +408,7 @@ clickRelease down up model =
             moveToolRelease (tileCoordinate down) (tileCoordinate up) model
 
         CreateTool ->
-            ( model, Cmd.none )
+            createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
 
 deleteToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
@@ -448,6 +460,31 @@ moveToolRelease down up model =
             addHistoryState (newPosition ()) model.game
     in
     if whiteCount <= 1 && blackCount <= 1 then
+        ( { model | game = newHistory () }, Cmd.none )
+
+    else
+        ( model, Cmd.none )
+
+
+createToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+createToolRelease down up model =
+    let
+        oldPosition =
+            P.getC model.game
+
+        spaceOccupied =
+            List.any (\p -> p.color == model.createToolColor && p.position == up) oldPosition.pieces
+
+        newPiece =
+            { color = model.createToolColor, position = up, pieceType = model.createToolType }
+
+        newPosition _ =
+            { oldPosition | pieces = newPiece :: oldPosition.pieces }
+
+        newHistory _ =
+            addHistoryState (newPosition ()) model.game
+    in
+    if up == down && not spaceOccupied then
         ( { model | game = newHistory () }, Cmd.none )
 
     else
@@ -592,8 +629,8 @@ toolConfig model =
                 DeleteTool ->
                     colorConfig model.deleteToolColor DeleteToolFilter
 
-                _ ->
-                    Element.none
+                CreateTool ->
+                    createToolConfig model
     in
     Element.column [ width fill ]
         [ toolHeader model.tool
@@ -655,6 +692,24 @@ createToolButton tool =
         ]
         [ icon [] Solid.chess
         , Element.text "Add Piece"
+        ]
+
+
+createToolConfig : Model -> Element Msg
+createToolConfig model =
+    Element.column [ width fill ]
+        [ Element.row []
+            [ toolConfigOption model.createToolColor CreateToolColor Sako.White "White"
+            , toolConfigOption model.createToolColor CreateToolColor Sako.Black "Black"
+            ]
+        , Element.wrappedRow []
+            [ toolConfigOption model.createToolType CreateToolType Sako.Pawn "Pawn"
+            , toolConfigOption model.createToolType CreateToolType Sako.Rock "Rock"
+            , toolConfigOption model.createToolType CreateToolType Sako.Knight "Knight"
+            , toolConfigOption model.createToolType CreateToolType Sako.Bishop "Bishop"
+            , toolConfigOption model.createToolType CreateToolType Sako.Queen "Queen"
+            , toolConfigOption model.createToolType CreateToolType Sako.King "King"
+            ]
         ]
 
 
