@@ -16,6 +16,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
+import Json.Encode as Encode
 import List.Extra as List
 import Pieces
 import Pivot as P exposing (Pivot)
@@ -245,6 +246,7 @@ type Msg
     | BlackSideColor Pieces.SideColor
     | KeyUp KeyStroke
     | DownloadSvg
+    | DownloadPng
     | SvgReadyForDownload String
 
 
@@ -253,6 +255,22 @@ type alias KeyStroke =
     , ctrlKey : Bool
     , altKey : Bool
     }
+
+
+type alias DownloadRequest =
+    { svgNode : String
+    , outputWidth : Int
+    , outputHeight : Int
+    }
+
+
+encodeDownloadRequest : DownloadRequest -> Encode.Value
+encodeDownloadRequest record =
+    Encode.object
+        [ ( "svgNode", Encode.string <| record.svgNode )
+        , ( "outputWidth", Encode.int <| record.outputWidth )
+        , ( "outputHeight", Encode.int <| record.outputHeight )
+        ]
 
 
 initialModel : Decode.Value -> Model
@@ -360,6 +378,17 @@ update msg model =
 
         DownloadSvg ->
             ( model, Ports.requestSvgNodeContent sakoEditorId )
+
+        DownloadPng ->
+            ( model
+            , Ports.triggerPngDownload
+                (encodeDownloadRequest
+                    { svgNode = sakoEditorId
+                    , outputWidth = 1000
+                    , outputHeight = 1000
+                    }
+                )
+            )
 
         SvgReadyForDownload fileContent ->
             ( model, File.Download.string "pacoSako.svg" "image/svg+xml" fileContent )
@@ -604,6 +633,7 @@ sidebar model =
         , colorSchemeConfigWhite model
         , colorSchemeConfigBlack model
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg")
+        , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png")
         ]
 
 

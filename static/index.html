@@ -5,9 +5,17 @@
     <meta charset="UTF-8">
     <title>Main</title>
     <script src="elm.js"></script>
+    <style>
+        #offscreen-canvas {
+            display: none;
+        }
+    </style>
 </head>
 
 <body>
+    <canvas id='offscreen-canvas'>
+        Canvas not supported
+    </canvas>
     <div id="elm"></div>
     <script>
         // Pass the window size to elm on init. This way we already know it on startup.
@@ -19,13 +27,67 @@
 
         // Ports to extract an svg node as xml from the dom.
         app.ports.requestSvgNodeContent.subscribe(function (elementId) {
-            svgElement = document.getElementById(elementId);
+            let svgElement = document.getElementById(elementId);
 
             if (svgElement) {
-                var svgURL = new XMLSerializer().serializeToString(svgElement);
+                let svgURL = new XMLSerializer().serializeToString(svgElement);
                 app.ports.responseSvgNodeContent.send(svgURL);
             }
         });
+
+        // Ports to download an svg node as png from the dom.
+        app.ports.triggerPngDownload.subscribe(function (request) {
+            console.log(JSON.stringify(request));
+            let svgElement = document.getElementById(request.svgNode);
+
+            if (svgElement) {
+                // Change the size of the svg node to match the requested output size.
+                // We create a copy because we don't want to change the original element.
+                let svgClone = svgElement.cloneNode(true);
+                // The attributes .width and .height on <svg> don't do what you would expect.
+                svgClone.setAttribute("width", request.outputWidth);
+                svgClone.setAttribute("height", request.outputHeight);
+
+                // https://stackoverflow.com/a/33227005
+                let svgURL = new XMLSerializer().serializeToString(svgClone);
+                let canvas = document.getElementById('offscreen-canvas');
+                canvas.width = request.outputWidth;
+                canvas.height = request.outputHeight;
+                let img = new Image();
+                img.onload = function () {
+                    canvas.getContext('2d').drawImage(this, 0, 0);
+                    download(canvas, 'pacoSako.png')
+                }
+                img.src = 'data:image/svg+xml; charset=utf8, ' + encodeURIComponent(svgURL);
+            }
+        });
+
+
+        /** Canvas Donwload from https://codepen.io/joseluisq/pen/mnkLu */
+        function download(canvas, filename) {
+            /// create an "off-screen" anchor tag
+            var lnk = document.createElement('a'), e;
+
+            /// the key here is to set the download attribute of the a tag
+            lnk.download = filename;
+
+            /// convert canvas content to data-uri for link. When download
+            /// attribute is set the content pointed to by link will be
+            /// pushed as "download" in HTML5 capable browsers
+            lnk.href = canvas.toDataURL("image/png;base64");
+
+            /// create a "fake" click-event to trigger the download
+            if (document.createEvent) {
+                e = document.createEvent("MouseEvents");
+                e.initMouseEvent("click", true, true, window,
+                    0, 0, 0, 0, 0, false, false, false,
+                    false, 0, null);
+
+                lnk.dispatchEvent(e);
+            } else if (lnk.fireEvent) {
+                lnk.fireEvent("onclick");
+            }
+        }
     </script>
 </body>
 
