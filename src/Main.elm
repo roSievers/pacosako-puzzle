@@ -43,7 +43,7 @@ type alias Model =
     , moveToolColor : Maybe Sako.Color
     , deleteToolColor : Maybe Sako.Color
     , createToolColor : Sako.Color
-    , createToolType : Sako.Piece
+    , createToolType : Sako.Type
     }
 
 
@@ -60,7 +60,7 @@ type alias PacoPosition =
 
 
 type alias PacoPiece =
-    { pieceType : Sako.Piece
+    { pieceType : Sako.Type
     , color : Sako.Color
     , position : Tile
     }
@@ -100,7 +100,7 @@ svgY (SvgCoord _ y) =
     y
 
 
-pacoPiece : Sako.Color -> Sako.Piece -> Tile -> PacoPiece
+pacoPiece : Sako.Color -> Sako.Type -> Tile -> PacoPiece
 pacoPiece color pieceType position =
     { pieceType = pieceType, color = color, position = position }
 
@@ -235,7 +235,7 @@ type Msg
     | MoveToolFilter (Maybe Sako.Color)
     | DeleteToolFilter (Maybe Sako.Color)
     | CreateToolColor Sako.Color
-    | CreateToolType Sako.Piece
+    | CreateToolType Sako.Type
     | Undo
     | Redo
     | Reset PacoPosition

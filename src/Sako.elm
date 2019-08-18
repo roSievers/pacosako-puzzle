@@ -1,10 +1,10 @@
-module Sako exposing (Color(..), Piece(..))
+module Sako exposing (Color(..), Type(..))
 
 {-| Basic types to represent the different pieces of the game
 -}
 
 
-type Piece
+type Type
     = Pawn
     | Rock
     | Knight

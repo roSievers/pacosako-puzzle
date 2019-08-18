@@ -36,7 +36,7 @@ This returns either a path node or a group node containing multiple path nodes.
 More complicated figures (e.g. the knight) layer multiple paths and need a group.
 
 -}
-figure : ColorScheme -> Sako.Piece -> Sako.Color -> Svg msg
+figure : ColorScheme -> Sako.Type -> Sako.Color -> Svg msg
 figure scheme piece color =
     let
         attributes =
@@ -187,7 +187,7 @@ unify elements =
 {-| Return a list of `d` attributes the contains the paths required to render the requested Piece.
 Make sure to keep the elements in order!
 -}
-figureAttribute : Sako.Piece -> List (Attribute msg)
+figureAttribute : Sako.Type -> List (Attribute msg)
 figureAttribute piece =
     case piece of
         Sako.Pawn ->
