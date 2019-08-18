@@ -237,6 +237,14 @@ type Msg
     | Reset PacoPosition
     | WhiteSideColor Pieces.SideColor
     | BlackSideColor Pieces.SideColor
+    | KeyUp KeyStroke
+
+
+type alias KeyStroke =
+    { key : String
+    , ctrlKey : Bool
+    , altKey : Bool
+    }
 
 
 initialModel : Decode.Value -> Model
@@ -317,10 +325,10 @@ update msg model =
             ( { model | deleteToolColor = newColor }, Cmd.none )
 
         Undo ->
-            ( { model | game = P.withRollback P.goL model.game }, Cmd.none )
+            ( applyUndo model, Cmd.none )
 
         Redo ->
-            ( { model | game = P.withRollback P.goR model.game }, Cmd.none )
+            ( applyRedo model, Cmd.none )
 
         Reset newPosition ->
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
@@ -330,6 +338,45 @@ update msg model =
 
         BlackSideColor newSideColor ->
             ( { model | colorScheme = Pieces.setBlack newSideColor model.colorScheme }, Cmd.none )
+
+        KeyUp stroke ->
+            keyUp stroke model
+
+
+applyUndo : Model -> Model
+applyUndo model =
+    { model | game = P.withRollback P.goL model.game }
+
+
+applyRedo : Model -> Model
+applyRedo model =
+    { model | game = P.withRollback P.goR model.game }
+
+
+{-| Handles all key presses.
+-}
+keyUp : KeyStroke -> Model -> ( Model, Cmd Msg )
+keyUp stroke model =
+    if stroke.ctrlKey == True && stroke.altKey == False then
+        ctrlKeyUp stroke.key model
+
+    else
+        ( model, Cmd.none )
+
+
+{-| Handles all ctrl + x shortcuts.
+-}
+ctrlKeyUp : String -> Model -> ( Model, Cmd Msg )
+ctrlKeyUp key model =
+    case key of
+        "z" ->
+            ( applyUndo model, Cmd.none )
+
+        "y" ->
+            ( applyRedo model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 {-| TODO: Currently the tools are "History aware", this can be removed. It will make the plumbing
@@ -434,7 +481,18 @@ addHistoryState newState p =
 
 subscriptions : model -> Sub Msg
 subscriptions _ =
-    Browser.Events.onResize WindowResize
+    Sub.batch
+        [ Browser.Events.onResize WindowResize
+        , Browser.Events.onKeyUp (Decode.map KeyUp decodeKeyStroke)
+        ]
+
+
+decodeKeyStroke : Decode.Decoder KeyStroke
+decodeKeyStroke =
+    Decode.map3 KeyStroke
+        (Decode.field "key" Decode.string)
+        (Decode.field "ctrlKey" Decode.bool)
+        (Decode.field "altKey" Decode.bool)
 
 
 
