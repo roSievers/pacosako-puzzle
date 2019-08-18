@@ -41,6 +41,7 @@ type alias Model =
     , windowSize : ( Int, Int )
     , tool : EditorTool
     , moveToolColor : Maybe Sako.Color
+    , deleteToolColor : Maybe Sako.Color
     }
 
 
@@ -230,6 +231,7 @@ type Msg
     | WindowResize Int Int
     | ToolSelect EditorTool
     | MoveToolFilter (Maybe Sako.Color)
+    | DeleteToolFilter (Maybe Sako.Color)
     | Undo
     | Redo
     | Reset PacoPosition
@@ -245,6 +247,7 @@ initialModel flags =
     , windowSize = parseWindowSize flags
     , tool = MoveTool
     , moveToolColor = Nothing
+    , deleteToolColor = Nothing
     }
 
 
@@ -307,8 +310,11 @@ update msg model =
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
 
-        MoveToolFilter colorFilter ->
-            ( { model | moveToolColor = colorFilter }, Cmd.none )
+        MoveToolFilter newColor ->
+            ( { model | moveToolColor = newColor }, Cmd.none )
+
+        DeleteToolFilter newColor ->
+            ( { model | deleteToolColor = newColor }, Cmd.none )
 
         Undo ->
             ( { model | game = P.withRollback P.goL model.game }, Cmd.none )
@@ -352,11 +358,13 @@ deleteToolRelease down up model =
         oldPosition =
             P.getC model.game
 
-        newPosition =
-            { oldPosition | pieces = List.filter (\p -> p.position /= up) oldPosition.pieces }
+        pieces =
+            List.filter
+                (\p -> p.position /= up || not (colorFilter model.deleteToolColor p))
+                oldPosition.pieces
 
         newHistory =
-            addHistoryState newPosition model.game
+            addHistoryState { oldPosition | pieces = pieces } model.game
     in
     if up == down then
         ( { model | game = newHistory }, Cmd.none )
@@ -371,20 +379,15 @@ moveToolRelease down up model =
         oldPosition =
             P.getC model.game
 
-        colorFilter =
-            model.moveToolColor
-                |> Maybe.map (\color piece -> piece.color == color)
-                |> Maybe.withDefault (\_ -> True)
-
         moveAction piece =
-            if piece.position == down && colorFilter piece then
+            if piece.position == down && colorFilter model.moveToolColor piece then
                 { piece | position = up }
 
             else
                 piece
 
         involvedPieces =
-            List.filter (\p -> (p.position == down || p.position == up) && colorFilter p) oldPosition.pieces
+            List.filter (\p -> (p.position == down || p.position == up) && colorFilter model.moveToolColor p) oldPosition.pieces
 
         ( whiteCount, blackCount ) =
             ( List.count (\p -> p.color == Sako.White) involvedPieces
@@ -402,6 +405,19 @@ moveToolRelease down up model =
 
     else
         ( model, Cmd.none )
+
+
+{-| Defines a filter for Pieces based on a Player color. Passing in the color `Nothing` defines
+a filter that always returns `True`.
+-}
+colorFilter : Maybe Sako.Color -> PacoPiece -> Bool
+colorFilter color piece =
+    case color of
+        Just c ->
+            piece.color == c
+
+        Nothing ->
+            True
 
 
 {-| Adds a new state, storing the current state in the history. If there currently is a redo chain
@@ -513,7 +529,10 @@ toolConfig model =
         toolBody =
             case model.tool of
                 MoveTool ->
-                    moveToolConfig model
+                    colorConfig model.moveToolColor MoveToolFilter
+
+                DeleteTool ->
+                    colorConfig model.deleteToolColor DeleteToolFilter
 
                 _ ->
                     Element.none
@@ -590,22 +609,25 @@ backgroundFocus isFocused =
         Background.color (Element.rgb255 255 255 255)
 
 
-moveToolConfigOption : Maybe Sako.Color -> Maybe Sako.Color -> String -> Element Msg
-moveToolConfigOption current buttonValue caption =
+{-| A toolConfigOption represents one of several possible choices. If it represents the currently
+choosen value (single selection only) it is highlighted. When clicked it will send a message.
+-}
+toolConfigOption : a -> (a -> msg) -> a -> String -> Element msg
+toolConfigOption currentValue msg buttonValue caption =
     Element.el
-        [ Events.onClick (MoveToolFilter buttonValue)
-        , backgroundFocus (current == buttonValue)
+        [ Events.onClick (msg buttonValue)
+        , backgroundFocus (currentValue == buttonValue)
         , padding 5
         ]
         (Element.text caption)
 
 
-moveToolConfig : Model -> Element Msg
-moveToolConfig model =
+colorConfig : Maybe Sako.Color -> (Maybe Sako.Color -> msg) -> Element msg
+colorConfig currentColor msg =
     Element.row [ width fill ]
-        [ moveToolConfigOption model.moveToolColor Nothing "all pieces"
-        , moveToolConfigOption model.moveToolColor (Just Sako.White) "white pieces"
-        , moveToolConfigOption model.moveToolColor (Just Sako.Black) "black pieces"
+        [ toolConfigOption currentColor msg Nothing "all pieces"
+        , toolConfigOption currentColor msg (Just Sako.White) "white pieces"
+        , toolConfigOption currentColor msg (Just Sako.Black) "black pieces"
         ]
 
 
