@@ -8,6 +8,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
+import File.Download
 import FontAwesome.Icon exposing (Icon, viewIcon)
 import FontAwesome.Solid as Solid
 import FontAwesome.Styles
@@ -18,6 +19,7 @@ import Json.Decode as Decode
 import List.Extra as List
 import Pieces
 import Pivot as P exposing (Pivot)
+import Ports
 import Sako
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -242,6 +244,8 @@ type Msg
     | WhiteSideColor Pieces.SideColor
     | BlackSideColor Pieces.SideColor
     | KeyUp KeyStroke
+    | DownloadSvg
+    | SvgReadyForDownload String
 
 
 type alias KeyStroke =
@@ -353,6 +357,12 @@ update msg model =
 
         KeyUp stroke ->
             keyUp stroke model
+
+        DownloadSvg ->
+            ( model, Ports.requestSvgNodeContent sakoEditorId )
+
+        SvgReadyForDownload fileContent ->
+            ( model, File.Download.string "pacoSako.svg" "image/svg+xml" fileContent )
 
 
 applyUndo : Model -> Model
@@ -521,6 +531,7 @@ subscriptions _ =
     Sub.batch
         [ Browser.Events.onResize WindowResize
         , Browser.Events.onKeyUp (Decode.map KeyUp decodeKeyStroke)
+        , Ports.responseSvgNodeContent SvgReadyForDownload
         ]
 
 
@@ -581,9 +592,8 @@ positionView model position drag =
 
 sidebar : Model -> Element Msg
 sidebar model =
-    Element.column [ width fill, height fill, spacing 10 ]
-        [ Element.text "Paco Ŝako Puzzle"
-        , Element.text "Sidebar"
+    Element.column [ width fill, height fill, spacing 10, padding 10 ]
+        [ Element.el [ Font.size 24 ] (Element.text "Paco Ŝako Editor")
         , Element.el [ Events.onClick (Reset initialPosition) ]
             (Element.text "Reset to starting position.")
         , Element.el [ Events.onClick (Reset emptyPosition) ]
@@ -593,6 +603,7 @@ sidebar model =
         , toolConfig model
         , colorSchemeConfigWhite model
         , colorSchemeConfigBlack model
+        , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg")
         ]
 
 
@@ -837,12 +848,18 @@ viewBox rect =
         |> Svg.Attributes.viewBox
 
 
+sakoEditorId : String
+sakoEditorId =
+    "sako-editor"
+
+
 positionSvg : Pieces.ColorScheme -> Int -> PacoPosition -> DragState -> Html Msg
 positionSvg colorScheme sideLength pacoPosition drag =
     Svg.svg
         [ Svg.Attributes.width <| String.fromInt sideLength
         , Svg.Attributes.height <| String.fromInt sideLength
         , viewBox boardViewBox
+        , Svg.Attributes.id sakoEditorId
         ]
         [ board
         , dragHints drag

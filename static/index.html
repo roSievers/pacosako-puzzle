@@ -16,6 +16,16 @@
             node: document.getElementById('elm'),
             flags: windowSize
         });
+
+        // Ports to extract an svg node as xml from the dom.
+        app.ports.requestSvgNodeContent.subscribe(function (elementId) {
+            svgElement = document.getElementById(elementId);
+
+            if (svgElement) {
+                var svgURL = new XMLSerializer().serializeToString(svgElement);
+                app.ports.responseSvgNodeContent.send(svgURL);
+            }
+        });
     </script>
 </body>
 
