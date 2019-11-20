@@ -20,6 +20,7 @@ import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
+import Parser exposing ((|.), (|=), Parser)
 import Pieces
 import Pivot as P exposing (Pivot)
 import Ports
@@ -49,7 +50,15 @@ type alias Model =
     , deleteToolColor : Maybe Sako.Color
     , createToolColor : Sako.Color
     , createToolType : Sako.Type
+    , userPaste : String
+    , pasteParsed : PositionParseResult
     }
+
+
+type PositionParseResult
+    = NoInput
+    | ParseError String
+    | ParseSuccess PacoPosition
 
 
 type EditorTool
@@ -258,6 +267,8 @@ type Msg
     | DownloadPng
     | SvgReadyForDownload String
     | NoOp
+    | UpdateUserPaste String
+    | UseUserPaste PacoPosition
 
 
 type alias KeyStroke =
@@ -294,6 +305,8 @@ initialModel flags =
     , deleteToolColor = Nothing
     , createToolColor = Sako.White
     , createToolType = Sako.Pawn
+    , userPaste = ""
+    , pasteParsed = NoInput
     }
 
 
@@ -405,6 +418,32 @@ update msg model =
 
         SvgReadyForDownload fileContent ->
             ( model, File.Download.string "pacoSako.svg" "image/svg+xml" fileContent )
+
+        UpdateUserPaste pasteContent ->
+            let
+                parseInput () =
+                    case Parser.run parsePosition pasteContent of
+                        Err _ ->
+                            -- ParseError (Debug.toString err)
+                            ParseError "Error: Make sure your input has the right shape!"
+
+                        Ok position ->
+                            ParseSuccess position
+            in
+            ( { model
+                | userPaste = pasteContent
+                , pasteParsed =
+                    if String.isEmpty pasteContent then
+                        NoInput
+
+                    else
+                        parseInput ()
+              }
+            , Cmd.none
+            )
+
+        UseUserPaste newPosition ->
+            ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
 
 applyUndo : Model -> Model
@@ -647,7 +686,7 @@ sidebar model =
         , colorSchemeConfigBlack model
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg")
         , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png")
-        , markdownCopyPaste (P.getC model.game)
+        , markdownCopyPaste model
         ]
 
 
@@ -1040,28 +1079,52 @@ icon attributes iconType =
     Element.el attributes (Element.html (viewIcon iconType))
 
 
-markdownCopyPaste : PacoPosition -> Element Msg
-markdownCopyPaste pacoPosition =
+markdownCopyPaste : Model -> Element Msg
+markdownCopyPaste model =
     Element.column [ spacing 5 ]
         [ Element.text "Text notation you can store"
         , Input.multiline [ Font.family [ Font.monospace ] ]
             { onChange = \_ -> NoOp
-            , text = markdownExchangeNotation pacoPosition
+            , text = markdownExchangeNotation (P.getC model.game).pieces
             , placeholder = Nothing
             , label = Input.labelHidden "Copy this to a text document for later use."
             , spellcheck = False
             }
+        , Element.text "Recover state from notation"
+        , Input.multiline [ Font.family [ Font.monospace ] ]
+            { onChange = UpdateUserPaste
+            , text = model.userPaste
+            , placeholder = Just (Input.placeholder [] (Element.text "Paste level notation."))
+            , label = Input.labelHidden "Paste level notation as you see above."
+            , spellcheck = False
+            }
+        , parsedMarkdownPaste model
+
+        -- , Element.el [ Events.onClick UseUserPaste ] (Element.text "Parse")
         ]
+
+
+parsedMarkdownPaste : Model -> Element Msg
+parsedMarkdownPaste model =
+    case model.pasteParsed of
+        NoInput ->
+            Element.none
+
+        ParseError error ->
+            Element.text error
+
+        ParseSuccess pacoPosition ->
+            Element.el [ Events.onClick (UseUserPaste pacoPosition) ] (Element.text "Load Position")
 
 
 {-| Converts a Paco Ŝako position into a human readable version that can be
 copied and stored in a text file.
 -}
-markdownExchangeNotation : PacoPosition -> String
-markdownExchangeNotation pacoPosition =
+markdownExchangeNotation : List PacoPiece -> String
+markdownExchangeNotation pieces =
     let
         dictRepresentation =
-            pacoPositionAsGrid pacoPosition
+            pacoPositionAsGrid pieces
 
         tileEntry : Int -> String
         tileEntry i =
@@ -1098,11 +1161,11 @@ type TileState
 
 {-| Converts a PacoPosition into a map from 1d tile indices to tile states
 -}
-pacoPositionAsGrid : PacoPosition -> Dict Int TileState
-pacoPositionAsGrid pacoPosition =
+pacoPositionAsGrid : List PacoPiece -> Dict Int TileState
+pacoPositionAsGrid pieces =
     let
         colorTiles filterColor =
-            pacoPosition.pieces
+            pieces
                 |> List.filter (\piece -> piece.color == filterColor)
                 |> List.map (\piece -> ( tileFlat piece.position, piece.pieceType ))
                 |> Dict.fromList
@@ -1114,6 +1177,47 @@ pacoPositionAsGrid pacoPosition =
         (colorTiles Sako.White)
         (colorTiles Sako.Black)
         Dict.empty
+
+
+gridAsPacoPosition : List (List TileState) -> PacoPosition
+gridAsPacoPosition tiles =
+    { moveNumber = 0
+    , pieces =
+        indexedMapNest2 tileAsPacoPiece tiles
+            |> List.concat
+            |> List.concat
+    }
+
+
+tileAsPacoPiece : Int -> Int -> TileState -> List PacoPiece
+tileAsPacoPiece row col tile =
+    let
+        position =
+            Tile col (7 - row)
+    in
+    case tile of
+        EmptyTile ->
+            []
+
+        WhiteTile w ->
+            [ { pieceType = w, color = Sako.White, position = position } ]
+
+        BlackTile b ->
+            [ { pieceType = b, color = Sako.Black, position = position } ]
+
+        PairTile w b ->
+            [ { pieceType = w, color = Sako.White, position = position }
+            , { pieceType = b, color = Sako.Black, position = position }
+            ]
+
+
+indexedMapNest2 : (Int -> Int -> a -> b) -> List (List a) -> List (List b)
+indexedMapNest2 f ls =
+    List.indexedMap
+        (\i xs ->
+            List.indexedMap (\j x -> f i j x) xs
+        )
+        ls
 
 
 tileStateAsString : TileState -> String
@@ -1152,3 +1256,100 @@ markdownTypeChar pieceType =
 
         Sako.King ->
             "K"
+
+
+{-| Parser that converts a single letter into the corresponding sako type.
+-}
+parseTypeChar : Parser (Maybe Sako.Type)
+parseTypeChar =
+    Parser.oneOf
+        [ Parser.succeed (Just Sako.Pawn) |. Parser.symbol "P"
+        , Parser.succeed (Just Sako.Rock) |. Parser.symbol "R"
+        , Parser.succeed (Just Sako.Knight) |. Parser.symbol "N"
+        , Parser.succeed (Just Sako.Bishop) |. Parser.symbol "B"
+        , Parser.succeed (Just Sako.Queen) |. Parser.symbol "Q"
+        , Parser.succeed (Just Sako.King) |. Parser.symbol "K"
+        , Parser.succeed Nothing |. Parser.symbol "."
+        ]
+
+
+{-| Parser that converts a pair like ".P", "BQ", ".." into a TileState.
+-}
+parseTile : Parser TileState
+parseTile =
+    Parser.succeed tileFromMaybe
+        |= parseTypeChar
+        |= parseTypeChar
+
+
+tileFromMaybe : Maybe Sako.Type -> Maybe Sako.Type -> TileState
+tileFromMaybe white black =
+    case ( white, black ) of
+        ( Nothing, Nothing ) ->
+            EmptyTile
+
+        ( Just w, Nothing ) ->
+            WhiteTile w
+
+        ( Nothing, Just b ) ->
+            BlackTile b
+
+        ( Just w, Just b ) ->
+            PairTile w b
+
+
+parseRow : Parser (List TileState)
+parseRow =
+    sepBy parseTile (Parser.symbol " ")
+        |> Parser.andThen parseLengthEightCheck
+
+
+parseGrid : Parser (List (List TileState))
+parseGrid =
+    sepBy parseRow linebreak
+        |> Parser.andThen parseLengthEightCheck
+
+
+parsePosition : Parser PacoPosition
+parsePosition =
+    parseGrid
+        |> Parser.map gridAsPacoPosition
+
+
+linebreak : Parser ()
+linebreak =
+    Parser.chompWhile (\c -> c == '\n' || c == '\u{000D}')
+
+
+{-| Parse a string with many tiles and return them as a list. When we encounter
+".B " with a trailing space, then we know that more tiles must follow.
+If there is no trailing space, we return.
+-}
+parseLengthEightCheck : List a -> Parser (List a)
+parseLengthEightCheck list =
+    if List.length list == 8 then
+        Parser.succeed list
+
+    else
+        Parser.problem "There must be 8 columns in each row."
+
+
+{-| Using `sepBy content separator` you can parse zero or more occurrences of
+the `content`, separated by `separator`.
+
+Returns a list of values returned by `content`.
+
+-}
+sepBy : Parser a -> Parser () -> Parser (List a)
+sepBy content separator =
+    let
+        helper ls =
+            Parser.oneOf
+                [ Parser.succeed (\tile -> Parser.Loop (tile :: ls))
+                    |= content
+                    |. Parser.oneOf [ separator, Parser.succeed () ]
+                , Parser.succeed (Parser.Done ls)
+                ]
+    in
+    Parser.loop [] helper
+        |> Parser.map List.reverse
