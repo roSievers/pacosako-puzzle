@@ -3,11 +3,13 @@ module Main exposing (main)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
+import Dict exposing (Dict)
 import Element exposing (Element, centerX, centerY, el, fill, fillPortion, height, padding, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
+import Element.Input as Input
 import File.Download
 import FontAwesome.Icon exposing (Icon, viewIcon)
 import FontAwesome.Solid as Solid
@@ -84,6 +86,13 @@ tileX (Tile x _) =
 tileY : Tile -> Int
 tileY (Tile _ y) =
     y
+
+
+{-| 1d coordinate for a tile. This is just x + 8 \* y
+-}
+tileFlat : Tile -> Int
+tileFlat (Tile x y) =
+    x + 8 * y
 
 
 {-| Represents a point in the Svg coordinate space. The game board is rendered from 0 to 800 in
@@ -248,6 +257,7 @@ type Msg
     | DownloadSvg
     | DownloadPng
     | SvgReadyForDownload String
+    | NoOp
 
 
 type alias KeyStroke =
@@ -308,6 +318,9 @@ init flags =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         -- When we register a mouse down event on the board we read the current board position
         -- from the DOM.
         MouseDown event ->
@@ -634,6 +647,7 @@ sidebar model =
         , colorSchemeConfigBlack model
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg")
         , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png")
+        , markdownCopyPaste (P.getC model.game)
         ]
 
 
@@ -1024,3 +1038,117 @@ dragHints drag =
 icon : List (Element.Attribute msg) -> Icon -> Element msg
 icon attributes iconType =
     Element.el attributes (Element.html (viewIcon iconType))
+
+
+markdownCopyPaste : PacoPosition -> Element Msg
+markdownCopyPaste pacoPosition =
+    Element.column [ spacing 5 ]
+        [ Element.text "Text notation you can store"
+        , Input.multiline [ Font.family [ Font.monospace ] ]
+            { onChange = \_ -> NoOp
+            , text = markdownExchangeNotation pacoPosition
+            , placeholder = Nothing
+            , label = Input.labelHidden "Copy this to a text document for later use."
+            , spellcheck = False
+            }
+        ]
+
+
+{-| Converts a Paco Ŝako position into a human readable version that can be
+copied and stored in a text file.
+-}
+markdownExchangeNotation : PacoPosition -> String
+markdownExchangeNotation pacoPosition =
+    let
+        dictRepresentation =
+            pacoPositionAsGrid pacoPosition
+
+        tileEntry : Int -> String
+        tileEntry i =
+            Dict.get i dictRepresentation
+                |> Maybe.withDefault EmptyTile
+                |> tileStateAsString
+
+        markdownRow : List Int -> String
+        markdownRow indexRow =
+            String.join " " (List.map tileEntry indexRow)
+
+        indices =
+            [ [ 56, 57, 58, 59, 60, 61, 62, 63 ]
+            , [ 48, 49, 50, 51, 52, 53, 54, 55 ]
+            , [ 40, 41, 42, 43, 44, 45, 46, 47 ]
+            , [ 32, 33, 34, 35, 36, 37, 38, 39 ]
+            , [ 24, 25, 26, 27, 28, 29, 30, 31 ]
+            , [ 16, 17, 18, 19, 20, 21, 22, 23 ]
+            , [ 8, 9, 10, 11, 12, 13, 14, 15 ]
+            , [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+            ]
+    in
+    indices
+        |> List.map markdownRow
+        |> String.join "\n"
+
+
+type TileState
+    = EmptyTile
+    | WhiteTile Sako.Type
+    | BlackTile Sako.Type
+    | PairTile Sako.Type Sako.Type
+
+
+{-| Converts a PacoPosition into a map from 1d tile indices to tile states
+-}
+pacoPositionAsGrid : PacoPosition -> Dict Int TileState
+pacoPositionAsGrid pacoPosition =
+    let
+        colorTiles filterColor =
+            pacoPosition.pieces
+                |> List.filter (\piece -> piece.color == filterColor)
+                |> List.map (\piece -> ( tileFlat piece.position, piece.pieceType ))
+                |> Dict.fromList
+    in
+    Dict.merge
+        (\i w dict -> Dict.insert i (WhiteTile w) dict)
+        (\i w b dict -> Dict.insert i (PairTile w b) dict)
+        (\i b dict -> Dict.insert i (BlackTile b) dict)
+        (colorTiles Sako.White)
+        (colorTiles Sako.Black)
+        Dict.empty
+
+
+tileStateAsString : TileState -> String
+tileStateAsString tileState =
+    case tileState of
+        EmptyTile ->
+            ".."
+
+        WhiteTile w ->
+            markdownTypeChar w ++ "."
+
+        BlackTile b ->
+            "." ++ markdownTypeChar b
+
+        PairTile w b ->
+            markdownTypeChar w ++ markdownTypeChar b
+
+
+markdownTypeChar : Sako.Type -> String
+markdownTypeChar pieceType =
+    case pieceType of
+        Sako.Pawn ->
+            "P"
+
+        Sako.Rock ->
+            "R"
+
+        Sako.Knight ->
+            "N"
+
+        Sako.Bishop ->
+            "B"
+
+        Sako.Queen ->
+            "Q"
+
+        Sako.King ->
+            "K"
