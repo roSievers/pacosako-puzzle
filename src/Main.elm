@@ -182,7 +182,7 @@ startDrag : Rect -> Mouse.Event -> DragState
 startDrag element event =
     let
         start =
-            gameSpaceCoordinate element realizedBoardViewBox event.clientPos
+            gameSpaceCoordinate element (realizedBoardViewBox ShowNumbers) event.clientPos
     in
     Dragging
         { start = start
@@ -200,7 +200,7 @@ moveDrag event drag =
         Dragging { start, rect } ->
             Dragging
                 { start = start
-                , current = gameSpaceCoordinate rect realizedBoardViewBox event.clientPos
+                , current = gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
                 , rect = rect
                 }
 
@@ -665,7 +665,14 @@ positionView model position drag =
                     , Mouse.onUp MouseUp
                     , Html.Attributes.id "boardDiv"
                     ]
-                    [ positionSvg model.colorScheme (windowHeight - windowSafetyMargin) position drag ]
+                    [ positionSvg
+                        { position = position
+                        , colorScheme = model.colorScheme
+                        , sideLength = windowHeight - windowSafetyMargin
+                        , drag = drag
+                        , viewMode = ShowNumbers
+                        }
+                    ]
                 )
             )
         )
@@ -895,13 +902,27 @@ colorSchemeConfigBlack model =
 --- End of the sidebar view code ---
 
 
-boardViewBox : Rect
-boardViewBox =
-    { x = -70 -- -70
-    , y = -30 -- -30
-    , width = 900
-    , height = 920 -- 920
-    }
+type ViewMode
+    = ShowNumbers
+    | CleanBoard
+
+
+boardViewBox : ViewMode -> Rect
+boardViewBox viewMode =
+    case viewMode of
+        ShowNumbers ->
+            { x = -70
+            , y = -30
+            , width = 900
+            , height = 920
+            }
+
+        CleanBoard ->
+            { x = -30
+            , y = -30
+            , width = 860
+            , height = 860
+            }
 
 
 {-| The svg showing the game board is a square. The viewport does not need to be a square.
@@ -911,11 +932,15 @@ calculates the rectangle used for the realized viewport in order to transform co
 Assumes, that height > width for boardViewBox.
 
 -}
-realizedBoardViewBox : Rect
-realizedBoardViewBox =
-    { boardViewBox
-        | x = boardViewBox.x - (boardViewBox.height - boardViewBox.width) / 2
-        , width = boardViewBox.height
+realizedBoardViewBox : ViewMode -> Rect
+realizedBoardViewBox viewMode =
+    let
+        rect =
+            boardViewBox viewMode
+    in
+    { rect
+        | x = rect.x - (rect.height - rect.width) / 2
+        , width = rect.height
     }
 
 
@@ -936,17 +961,28 @@ sakoEditorId =
     "sako-editor"
 
 
-positionSvg : Pieces.ColorScheme -> Int -> PacoPosition -> DragState -> Html Msg
-positionSvg colorScheme sideLength pacoPosition drag =
+
+--positionSvg : Pieces.ColorScheme -> Int -> PacoPosition -> DragState -> Html Msg
+
+
+positionSvg :
+    { position : PacoPosition
+    , sideLength : Int
+    , colorScheme : Pieces.ColorScheme
+    , drag : DragState
+    , viewMode : ViewMode
+    }
+    -> Html Msg
+positionSvg config =
     Svg.svg
-        [ Svg.Attributes.width <| String.fromInt sideLength
-        , Svg.Attributes.height <| String.fromInt sideLength
-        , viewBox boardViewBox
+        [ Svg.Attributes.width <| String.fromInt config.sideLength
+        , Svg.Attributes.height <| String.fromInt config.sideLength
+        , viewBox (boardViewBox config.viewMode)
         , Svg.Attributes.id sakoEditorId
         ]
         [ board
-        , dragHints drag
-        , piecesSvg colorScheme pacoPosition
+        , dragHints config.drag
+        , piecesSvg config.colorScheme config.position
         ]
 
 
@@ -1114,7 +1150,18 @@ parsedMarkdownPaste model =
             Element.text error
 
         ParseSuccess pacoPosition ->
-            Element.el [ Events.onClick (UseUserPaste pacoPosition) ] (Element.text "Load Position")
+            Element.row [ Events.onClick (UseUserPaste pacoPosition), spacing 5 ]
+                [ Element.html
+                    (positionSvg
+                        { position = pacoPosition
+                        , colorScheme = model.colorScheme
+                        , sideLength = 100
+                        , drag = DragOff
+                        , viewMode = CleanBoard
+                        }
+                    )
+                , Element.text "Load"
+                ]
 
 
 {-| Converts a Paco Ŝako position into a human readable version that can be
