@@ -17,6 +17,7 @@ import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
@@ -24,13 +25,14 @@ import Parser exposing ((|.), (|=), Parser)
 import Pieces
 import Pivot as P exposing (Pivot)
 import Ports
+import RemoteData exposing (WebData)
 import Sako
 import Svg exposing (Svg)
 import Svg.Attributes
 import Task
 
 
-main : Program Decode.Value Model Msg
+main : Program Decode.Value Model GlobalMsg
 main =
     Browser.element
         { init = init
@@ -41,8 +43,24 @@ main =
 
 
 type alias Model =
+    { taco : Taco
+    , page : Page
+    , editor : Editor
+    , exampleFile : WebData (List PacoPosition)
+    }
+
+
+type Page
+    = EditorPage
+    | LibraryPage
+
+
+type alias Taco =
+    { colorScheme : Pieces.ColorScheme }
+
+
+type alias Editor =
     { game : Pivot PacoPosition
-    , colorScheme : Pieces.ColorScheme
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
@@ -246,6 +264,15 @@ type alias Rect =
     }
 
 
+type GlobalMsg
+    = EditorMsgWrapper Msg
+    | LoadIntoEditor PacoPosition
+    | WhiteSideColor Pieces.SideColor
+    | BlackSideColor Pieces.SideColor
+    | GetLibrarySuccess String
+    | GetLibraryFailure Http.Error
+
+
 type Msg
     = MouseDown Mouse.Event
     | MouseMove Mouse.Event
@@ -260,8 +287,6 @@ type Msg
     | Undo
     | Redo
     | Reset PacoPosition
-    | WhiteSideColor Pieces.SideColor
-    | BlackSideColor Pieces.SideColor
     | KeyUp KeyStroke
     | DownloadSvg
     | DownloadPng
@@ -294,10 +319,9 @@ encodeDownloadRequest record =
         ]
 
 
-initialModel : Decode.Value -> Model
-initialModel flags =
+initialEditor : Decode.Value -> Editor
+initialEditor flags =
     { game = P.singleton initialPosition
-    , colorScheme = Pieces.defaultColorScheme
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = MoveTool
@@ -308,6 +332,11 @@ initialModel flags =
     , userPaste = ""
     , pasteParsed = NoInput
     }
+
+
+initialTaco : Taco
+initialTaco =
+    { colorScheme = Pieces.defaultColorScheme }
 
 
 parseWindowSize : Decode.Value -> ( Int, Int )
@@ -323,13 +352,84 @@ sizeDecoder =
         (Decode.field "height" Decode.int)
 
 
-init : Decode.Value -> ( Model, Cmd Msg )
+init : Decode.Value -> ( Model, Cmd GlobalMsg )
 init flags =
-    ( initialModel flags, Cmd.none )
+    ( { taco = initialTaco
+      , editor = initialEditor flags
+      , page = LibraryPage
+      , exampleFile = RemoteData.Loading
+      }
+    , Http.get
+        { expect = Http.expectString expectLibrary
+        , url = "/static/examples.txt"
+        }
+    )
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+expectLibrary : Result Http.Error String -> GlobalMsg
+expectLibrary result =
+    case result of
+        Ok content ->
+            GetLibrarySuccess content
+
+        Err error ->
+            GetLibraryFailure error
+
+
+update : GlobalMsg -> Model -> ( Model, Cmd GlobalMsg )
 update msg model =
+    case msg of
+        EditorMsgWrapper editorMsg ->
+            let
+                ( editorModel, editorCmd ) =
+                    updateEditor editorMsg model.editor
+            in
+            ( { model | editor = editorModel }, Cmd.map EditorMsgWrapper editorCmd )
+
+        LoadIntoEditor newPosition ->
+            let
+                ( editorModel, editorCmd ) =
+                    updateEditor (Reset newPosition) model.editor
+            in
+            ( { model | editor = editorModel, page = EditorPage }
+            , Cmd.map EditorMsgWrapper editorCmd
+            )
+
+        WhiteSideColor newSideColor ->
+            ( { model | taco = setColorScheme (Pieces.setWhite newSideColor model.taco.colorScheme) model.taco }
+            , Cmd.none
+            )
+
+        BlackSideColor newSideColor ->
+            ( { model | taco = setColorScheme (Pieces.setBlack newSideColor model.taco.colorScheme) model.taco }
+            , Cmd.none
+            )
+
+        GetLibrarySuccess content ->
+            let
+                examples =
+                    case Parser.run parseLibrary content of
+                        Err _ ->
+                            RemoteData.Failure (Http.BadBody "The examples file is broken")
+
+                        Ok positions ->
+                            RemoteData.Success positions
+            in
+            ( { model | exampleFile = examples }, Cmd.none )
+
+        GetLibraryFailure error ->
+            ( { model | exampleFile = RemoteData.Failure error }, Cmd.none )
+
+
+{-| Helper function to update the color scheme inside the taco.
+-}
+setColorScheme : Pieces.ColorScheme -> Taco -> Taco
+setColorScheme colorScheme taco =
+    { taco | colorScheme = colorScheme }
+
+
+updateEditor : Msg -> Editor -> ( Editor, Cmd Msg )
+updateEditor msg model =
     case msg of
         NoOp ->
             ( model, Cmd.none )
@@ -393,12 +493,6 @@ update msg model =
         Reset newPosition ->
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
-        WhiteSideColor newSideColor ->
-            ( { model | colorScheme = Pieces.setWhite newSideColor model.colorScheme }, Cmd.none )
-
-        BlackSideColor newSideColor ->
-            ( { model | colorScheme = Pieces.setBlack newSideColor model.colorScheme }, Cmd.none )
-
         KeyUp stroke ->
             keyUp stroke model
 
@@ -446,19 +540,19 @@ update msg model =
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
 
-applyUndo : Model -> Model
+applyUndo : Editor -> Editor
 applyUndo model =
     { model | game = P.withRollback P.goL model.game }
 
 
-applyRedo : Model -> Model
+applyRedo : Editor -> Editor
 applyRedo model =
     { model | game = P.withRollback P.goR model.game }
 
 
 {-| Handles all key presses.
 -}
-keyUp : KeyStroke -> Model -> ( Model, Cmd Msg )
+keyUp : KeyStroke -> Editor -> ( Editor, Cmd Msg )
 keyUp stroke model =
     if stroke.ctrlKey == True && stroke.altKey == False then
         ctrlKeyUp stroke.key model
@@ -469,7 +563,7 @@ keyUp stroke model =
 
 {-| Handles all ctrl + x shortcuts.
 -}
-ctrlKeyUp : String -> Model -> ( Model, Cmd Msg )
+ctrlKeyUp : String -> Editor -> ( Editor, Cmd Msg )
 ctrlKeyUp key model =
     case key of
         "z" ->
@@ -489,7 +583,7 @@ They may still need a lower level of history awareness where they can indicate i
 state is meant as a preview or an invalid ephemeral display state that should not be preserved.
 
 -}
-clickRelease : SvgCoord -> SvgCoord -> Model -> ( Model, Cmd Msg )
+clickRelease : SvgCoord -> SvgCoord -> Editor -> ( Editor, Cmd Msg )
 clickRelease down up model =
     case model.tool of
         DeleteTool ->
@@ -502,7 +596,7 @@ clickRelease down up model =
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
 
-deleteToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+deleteToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
 deleteToolRelease down up model =
     let
         oldPosition =
@@ -523,7 +617,7 @@ deleteToolRelease down up model =
         ( model, Cmd.none )
 
 
-moveToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+moveToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
 moveToolRelease down up model =
     let
         oldPosition =
@@ -557,7 +651,7 @@ moveToolRelease down up model =
         ( model, Cmd.none )
 
 
-createToolRelease : Tile -> Tile -> Model -> ( Model, Cmd Msg )
+createToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
 createToolRelease down up model =
     let
         oldPosition =
@@ -607,13 +701,14 @@ addHistoryState newState p =
         p |> P.setR [] |> P.appendGoR newState
 
 
-subscriptions : model -> Sub Msg
+subscriptions : model -> Sub GlobalMsg
 subscriptions _ =
     Sub.batch
         [ Browser.Events.onResize WindowResize
         , Browser.Events.onKeyUp (Decode.map KeyUp decodeKeyStroke)
         , Ports.responseSvgNodeContent SvgReadyForDownload
         ]
+        |> Sub.map EditorMsgWrapper
 
 
 decodeKeyStroke : Decode.Decoder KeyStroke
@@ -628,18 +723,84 @@ decodeKeyStroke =
 --- View code
 
 
-view : Model -> Html Msg
+view : Model -> Html GlobalMsg
 view model =
-    Element.layout []
-        (ui model)
+    Element.layout [] (globalUi model)
 
 
-ui : Model -> Element Msg
-ui model =
+globalUi : Model -> Element GlobalMsg
+globalUi model =
+    case model.page of
+        EditorPage ->
+            editorUi model.taco model.editor
+
+        LibraryPage ->
+            libraryUi model.taco model
+
+
+libraryUi : Taco -> Model -> Element GlobalMsg
+libraryUi taco model =
+    Element.column [ padding 5, spacing 5 ]
+        [ Element.el [ Font.size 30 ] (Element.text "Paco Ŝako Editor")
+        , Element.text "Choose an initial board position to open the editor."
+        , Element.el [ Font.size 24 ] (Element.text "Start new")
+        , Element.row [ spacing 5 ]
+            [ loadPositionPreview taco emptyPosition
+            , loadPositionPreview taco initialPosition
+            ]
+        , Element.el [ Font.size 24 ] (Element.text "Load saved position")
+        , Element.text "Sorry, but saving positions is not supported yet."
+        , Element.el [ Font.size 24 ] (Element.text "Load examples")
+        , examplesList taco model
+        ]
+
+
+examplesList : Taco -> Model -> Element GlobalMsg
+examplesList taco model =
+    case model.exampleFile of
+        RemoteData.NotAsked ->
+            Element.none
+
+        RemoteData.Loading ->
+            Element.text "Loading examples"
+
+        RemoteData.Failure _ ->
+            Element.text "Error while loading examples."
+
+        RemoteData.Success examplePositions ->
+            let
+                positionPreviews =
+                    List.map (loadPositionPreview taco) examplePositions
+
+                rows =
+                    List.greedyGroupsOf 4 positionPreviews
+            in
+            Element.column [ spacing 5 ]
+                (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
+
+
+loadPositionPreview : Taco -> PacoPosition -> Element GlobalMsg
+loadPositionPreview taco position =
+    Element.el [ Events.onClick (LoadIntoEditor position) ]
+        (Element.html
+            (positionSvg
+                { position = position
+                , colorScheme = taco.colorScheme
+                , sideLength = 250
+                , drag = DragOff
+                , viewMode = CleanBoard
+                }
+            )
+            |> Element.map EditorMsgWrapper
+        )
+
+
+editorUi : Taco -> Editor -> Element GlobalMsg
+editorUi taco model =
     Element.row [ width fill, height fill ]
         [ Element.html FontAwesome.Styles.css
-        , positionView model (P.getC model.game) model.drag
-        , sidebar model
+        , positionView taco model (P.getC model.game) model.drag |> Element.map EditorMsgWrapper
+        , sidebar taco model
         ]
 
 
@@ -650,8 +811,8 @@ windowSafetyMargin =
     10
 
 
-positionView : Model -> PacoPosition -> DragState -> Element Msg
-positionView model position drag =
+positionView : Taco -> Editor -> PacoPosition -> DragState -> Element Msg
+positionView taco model position drag =
     let
         ( _, windowHeight ) =
             model.windowSize
@@ -667,7 +828,7 @@ positionView model position drag =
                     ]
                     [ positionSvg
                         { position = position
-                        , colorScheme = model.colorScheme
+                        , colorScheme = taco.colorScheme
                         , sideLength = windowHeight - windowSafetyMargin
                         , drag = drag
                         , viewMode = ShowNumbers
@@ -678,22 +839,24 @@ positionView model position drag =
         )
 
 
-sidebar : Model -> Element Msg
-sidebar model =
+sidebar : Taco -> Editor -> Element GlobalMsg
+sidebar taco model =
     Element.column [ width fill, height fill, spacing 10, padding 10 ]
         [ Element.el [ Font.size 24 ] (Element.text "Paco Ŝako Editor")
         , Element.el [ Events.onClick (Reset initialPosition) ]
             (Element.text "Reset to starting position.")
+            |> Element.map EditorMsgWrapper
         , Element.el [ Events.onClick (Reset emptyPosition) ]
             (Element.text "Clear board.")
-        , undo model.game
-        , redo model.game
-        , toolConfig model
-        , colorSchemeConfigWhite model
-        , colorSchemeConfigBlack model
-        , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg")
-        , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png")
-        , markdownCopyPaste model
+            |> Element.map EditorMsgWrapper
+        , undo model.game |> Element.map EditorMsgWrapper
+        , redo model.game |> Element.map EditorMsgWrapper
+        , toolConfig model |> Element.map EditorMsgWrapper
+        , colorSchemeConfigWhite taco
+        , colorSchemeConfigBlack taco
+        , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg") |> Element.map EditorMsgWrapper
+        , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png") |> Element.map EditorMsgWrapper
+        , markdownCopyPaste taco model |> Element.map EditorMsgWrapper
         ]
 
 
@@ -719,7 +882,7 @@ redo p =
         Element.text "Can't redo."
 
 
-toolConfig : Model -> Element Msg
+toolConfig : Editor -> Element Msg
 toolConfig model =
     let
         toolBody =
@@ -796,7 +959,7 @@ createToolButton tool =
         ]
 
 
-createToolConfig : Model -> Element Msg
+createToolConfig : Editor -> Element Msg
 createToolConfig model =
     Element.column [ width fill ]
         [ Element.row []
@@ -866,35 +1029,35 @@ colorPicker msg currentColor newColor colorName =
     Element.el (baseAttributes ++ selectionAttributes) (Element.text colorName)
 
 
-colorSchemeConfigWhite : Model -> Element Msg
-colorSchemeConfigWhite model =
+colorSchemeConfigWhite : Taco -> Element GlobalMsg
+colorSchemeConfigWhite taco =
     Element.wrappedRow [ spacing 2 ]
         [ Element.text "White pieces: "
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.whitePieceColor "white"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.redPieceColor "red"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.orangePieceColor "orange"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.yellowPieceColor "yellow"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.greenPieceColor "green"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.bluePieceColor "blue"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.purplePieceColor "purple"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.pinkPieceColor "pink"
-        , colorPicker WhiteSideColor model.colorScheme.white Pieces.blackPieceColor "black"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.whitePieceColor "white"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.redPieceColor "red"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.orangePieceColor "orange"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.yellowPieceColor "yellow"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.greenPieceColor "green"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.bluePieceColor "blue"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.purplePieceColor "purple"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.pinkPieceColor "pink"
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.blackPieceColor "black"
         ]
 
 
-colorSchemeConfigBlack : Model -> Element Msg
-colorSchemeConfigBlack model =
+colorSchemeConfigBlack : Taco -> Element GlobalMsg
+colorSchemeConfigBlack taco =
     Element.wrappedRow [ spacing 2 ]
         [ Element.text "Black pieces: "
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.whitePieceColor "white"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.redPieceColor "red"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.orangePieceColor "orange"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.yellowPieceColor "yellow"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.greenPieceColor "green"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.bluePieceColor "blue"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.purplePieceColor "purple"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.pinkPieceColor "pink"
-        , colorPicker BlackSideColor model.colorScheme.black Pieces.blackPieceColor "black"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.whitePieceColor "white"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.redPieceColor "red"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.orangePieceColor "orange"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.yellowPieceColor "yellow"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.greenPieceColor "green"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.bluePieceColor "blue"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.purplePieceColor "purple"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.pinkPieceColor "pink"
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.blackPieceColor "black"
         ]
 
 
@@ -1115,8 +1278,8 @@ icon attributes iconType =
     Element.el attributes (Element.html (viewIcon iconType))
 
 
-markdownCopyPaste : Model -> Element Msg
-markdownCopyPaste model =
+markdownCopyPaste : Taco -> Editor -> Element Msg
+markdownCopyPaste taco model =
     Element.column [ spacing 5 ]
         [ Element.text "Text notation you can store"
         , Input.multiline [ Font.family [ Font.monospace ] ]
@@ -1134,14 +1297,14 @@ markdownCopyPaste model =
             , label = Input.labelHidden "Paste level notation as you see above."
             , spellcheck = False
             }
-        , parsedMarkdownPaste model
+        , parsedMarkdownPaste taco model
 
         -- , Element.el [ Events.onClick UseUserPaste ] (Element.text "Parse")
         ]
 
 
-parsedMarkdownPaste : Model -> Element Msg
-parsedMarkdownPaste model =
+parsedMarkdownPaste : Taco -> Editor -> Element Msg
+parsedMarkdownPaste taco model =
     case model.pasteParsed of
         NoInput ->
             Element.none
@@ -1154,7 +1317,7 @@ parsedMarkdownPaste model =
                 [ Element.html
                     (positionSvg
                         { position = pacoPosition
-                        , colorScheme = model.colorScheme
+                        , colorScheme = taco.colorScheme
                         , sideLength = 100
                         , drag = DragOff
                         , viewMode = CleanBoard
@@ -1361,6 +1524,13 @@ parsePosition : Parser PacoPosition
 parsePosition =
     parseGrid
         |> Parser.map gridAsPacoPosition
+
+
+{-| A library is a list of PacoPositions separated by a newline.
+-}
+parseLibrary : Parser (List PacoPosition)
+parseLibrary =
+    sepBy parsePosition (Parser.symbol "-" |. linebreak)
 
 
 linebreak : Parser ()
