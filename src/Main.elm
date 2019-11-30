@@ -10,6 +10,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region
 import File.Download
 import FontAwesome.Icon exposing (Icon, viewIcon)
 import FontAwesome.Solid as Solid
@@ -21,6 +22,8 @@ import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
+import Markdown.Html
+import Markdown.Parser
 import Parser exposing ((|.), (|=), Parser)
 import Pieces
 import Pivot as P exposing (Pivot)
@@ -46,6 +49,7 @@ type alias Model =
     { taco : Taco
     , page : Page
     , editor : Editor
+    , blog : Blog
     , exampleFile : WebData (List PacoPosition)
     }
 
@@ -53,6 +57,7 @@ type alias Model =
 type Page
     = EditorPage
     | LibraryPage
+    | BlogPage
 
 
 type alias Taco =
@@ -71,6 +76,10 @@ type alias Editor =
     , userPaste : String
     , pasteParsed : PositionParseResult
     }
+
+
+type alias Blog =
+    { text : String }
 
 
 type PositionParseResult
@@ -266,13 +275,18 @@ type alias Rect =
 
 type GlobalMsg
     = EditorMsgWrapper Msg
+    | BlogMsgWrapper BlogEditorMsg
     | LoadIntoEditor PacoPosition
+    | OpenLibraryPage
+    | OpenBlogPage
     | WhiteSideColor Pieces.SideColor
     | BlackSideColor Pieces.SideColor
     | GetLibrarySuccess String
     | GetLibraryFailure Http.Error
 
 
+{-| Messages that may only affect data in the position editor page.
+-}
 type Msg
     = MouseDown Mouse.Event
     | MouseMove Mouse.Event
@@ -294,6 +308,10 @@ type Msg
     | NoOp
     | UpdateUserPaste String
     | UseUserPaste PacoPosition
+
+
+type BlogEditorMsg
+    = OnMarkdownInput String
 
 
 type alias KeyStroke =
@@ -334,6 +352,26 @@ initialEditor flags =
     }
 
 
+initialBlog : Blog
+initialBlog =
+    { text = """# Markdown editor with Paco Ŝako support
+
+There are many details about Paco Ŝako that I would love to discuss. Having a way to write and share articles on Paco Ŝako online would greatly contribute this. In this editor you can use [Github flavored Markdown](https://guides.github.com/features/mastering-markdown/) to write articles on Paco Ŝako.
+
+We have replaced code blocks with rendered Paco Ŝako positions. You can create positions in the editor and then create a blog post based on it.
+
+```
+.. R. .. RR .. .. QQ ..
+.. .. .. .. PB .. .P P.
+.. .. PP .. .. .N .. ..
+K. .. .P .. .P NP B. ..
+P. .. .. .. .P PP .. P.
+.R .. P. .. .. .. .K ..
+B. .P .. .. .. .. N. ..
+.. .. .. .. .N .. .. PB
+```""" }
+
+
 initialTaco : Taco
 initialTaco =
     { colorScheme = Pieces.defaultColorScheme }
@@ -355,8 +393,9 @@ sizeDecoder =
 init : Decode.Value -> ( Model, Cmd GlobalMsg )
 init flags =
     ( { taco = initialTaco
+      , page = BlogPage
       , editor = initialEditor flags
-      , page = LibraryPage
+      , blog = initialBlog
       , exampleFile = RemoteData.Loading
       }
     , Http.get
@@ -385,6 +424,13 @@ update msg model =
                     updateEditor editorMsg model.editor
             in
             ( { model | editor = editorModel }, Cmd.map EditorMsgWrapper editorCmd )
+
+        BlogMsgWrapper blogEditorMsg ->
+            let
+                ( blogEditorModel, blogEditorCmd ) =
+                    updateBlogEditor blogEditorMsg model.blog
+            in
+            ( { model | blog = blogEditorModel }, blogEditorCmd )
 
         LoadIntoEditor newPosition ->
             let
@@ -419,6 +465,12 @@ update msg model =
 
         GetLibraryFailure error ->
             ( { model | exampleFile = RemoteData.Failure error }, Cmd.none )
+
+        OpenLibraryPage ->
+            ( { model | page = LibraryPage }, Cmd.none )
+
+        OpenBlogPage ->
+            ( { model | page = BlogPage }, Cmd.none )
 
 
 {-| Helper function to update the color scheme inside the taco.
@@ -719,8 +771,17 @@ decodeKeyStroke =
         (Decode.field "altKey" Decode.bool)
 
 
+updateBlogEditor : BlogEditorMsg -> Blog -> ( Blog, Cmd GlobalMsg )
+updateBlogEditor msg blog =
+    case msg of
+        OnMarkdownInput newText ->
+            ( { blog | text = newText }, Cmd.none )
 
---- View code
+
+
+--------------------------------------------------------------------------------
+-- View code -------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 
 view : Model -> Html GlobalMsg
@@ -737,11 +798,15 @@ globalUi model =
         LibraryPage ->
             libraryUi model.taco model
 
+        BlogPage ->
+            blogUi model.taco model.blog
+
 
 libraryUi : Taco -> Model -> Element GlobalMsg
 libraryUi taco model =
     Element.column [ padding 5, spacing 5 ]
         [ Element.el [ Font.size 30 ] (Element.text "Paco Ŝako Editor")
+        , el [ Events.onClick OpenBlogPage ] (Element.text "Open Blog editor")
         , Element.text "Choose an initial board position to open the editor."
         , Element.el [ Font.size 24 ] (Element.text "Start new")
         , Element.row [ spacing 5 ]
@@ -837,6 +902,12 @@ positionView taco model position drag =
                 )
             )
         )
+
+
+
+--------------------------------------------------------------------------------
+-- Sidebar view ----------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 
 sidebar : Taco -> Editor -> Element GlobalMsg
@@ -1298,8 +1369,6 @@ markdownCopyPaste taco model =
             , spellcheck = False
             }
         , parsedMarkdownPaste taco model
-
-        -- , Element.el [ Events.onClick UseUserPaste ] (Element.text "Parse")
         ]
 
 
@@ -1570,3 +1639,138 @@ sepBy content separator =
     in
     Parser.loop [] helper
         |> Parser.map List.reverse
+
+
+
+--------------------------------------------------------------------------------
+-- Blog editor ui --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+blogUi : Taco -> Blog -> Element GlobalMsg
+blogUi taco blog =
+    Element.column [ width fill ]
+        [ el [ Events.onClick OpenLibraryPage ] (Element.text "Return to home")
+        , Element.row [ Element.width Element.fill ]
+            [ Input.multiline [ Element.width (Element.px 600) ]
+                { onChange = OnMarkdownInput >> BlogMsgWrapper
+                , text = blog.text
+                , placeholder = Nothing
+                , label = Input.labelHidden "Markdown input"
+                , spellcheck = False
+                }
+            , case markdownView taco blog of
+                Ok rendered ->
+                    Element.column
+                        [ Element.spacing 30
+                        , Element.padding 80
+                        , Element.width (Element.fill |> Element.maximum 1000)
+                        , Element.centerX
+                        ]
+                        rendered
+
+                Err errors ->
+                    Element.text errors
+            ]
+        ]
+
+
+markdownView : Taco -> Blog -> Result String (List (Element GlobalMsg))
+markdownView taco blog =
+    blog.text
+        |> Markdown.Parser.parse
+        |> Result.mapError (\error -> error |> List.map Markdown.Parser.deadEndToString |> String.join "\n")
+        |> Result.andThen (Markdown.Parser.render (renderer taco))
+
+
+codeBlock : Taco -> { body : String, language : Maybe String } -> Element GlobalMsg
+codeBlock taco details =
+    case Parser.run parsePosition details.body of
+        Err _ ->
+            Element.text "Error: Make sure your input has the right shape!"
+
+        Ok position ->
+            loadPositionPreview taco position
+
+
+renderer : Taco -> Markdown.Parser.Renderer (Element GlobalMsg)
+renderer taco =
+    { heading = heading
+    , raw =
+        Element.paragraph
+            [ Element.spacing 15 ]
+    , thematicBreak = Element.none
+    , plain = Element.text
+    , bold = \content -> Element.row [ Font.bold ] [ Element.text content ]
+    , italic = \content -> Element.row [ Font.italic ] [ Element.text content ]
+    , code = code
+    , link =
+        \{ title, destination } body ->
+            Element.newTabLink
+                [ Element.htmlAttribute (Html.Attributes.style "display" "inline-flex") ]
+                { url = destination
+                , label =
+                    Element.paragraph
+                        [ Font.color (Element.rgb255 0 0 255)
+                        ]
+                        body
+                }
+                |> Ok
+    , image =
+        \image body ->
+            Element.image [ Element.width Element.fill ] { src = image.src, description = body }
+                |> Ok
+    , list =
+        \items ->
+            Element.column [ Element.spacing 15 ]
+                (items
+                    |> List.map
+                        (\itemBlocks ->
+                            Element.row [ Element.spacing 5 ]
+                                [ Element.el
+                                    [ Element.alignTop ]
+                                    (Element.text "•")
+                                , itemBlocks
+                                ]
+                        )
+                )
+    , codeBlock = codeBlock taco
+    , html = Markdown.Html.oneOf []
+    }
+
+
+heading : { level : Int, rawText : String, children : List (Element msg) } -> Element msg
+heading { level, rawText, children } =
+    Element.paragraph
+        [ Font.size
+            (case level of
+                1 ->
+                    36
+
+                2 ->
+                    24
+
+                _ ->
+                    20
+            )
+        , Font.bold
+        , Font.family [ Font.typeface "Montserrat" ]
+        , Element.Region.heading level
+        , Element.htmlAttribute
+            (Html.Attributes.attribute "name" (rawTextToId rawText))
+        , Font.center
+        , Element.htmlAttribute
+            (Html.Attributes.id (rawTextToId rawText))
+        ]
+        children
+
+
+rawTextToId rawText =
+    rawText
+        |> String.toLower
+        |> String.replace " " ""
+
+
+code : String -> Element msg
+code snippet =
+    Element.text snippet
