@@ -6679,7 +6679,7 @@ var $author$project$Main$init = function (flags) {
 		$elm$http$Http$get(
 			{
 				expect: $elm$http$Http$expectString($author$project$Main$expectLibrary),
-				url: '/static/examples.txt'
+				url: 'static/examples.txt'
 			}));
 };
 var $author$project$Main$EditorMsgWrapper = function (a) {
