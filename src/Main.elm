@@ -369,6 +369,15 @@ P. .. .. .. .P PP .. P.
 .R .. P. .. .. .. .K ..
 B. .P .. .. .. .. N. ..
 .. .. .. .. .N .. .. PB
+-
+N. .. .. .. .. .. .. .R
+.Q PP .. .. P. P. .. ..
+.. .. .P .. .. .K .. ..
+.. .. .. .. PP K. N. ..
+.. .. .P .. B. .B QP ..
+P. .P R. .R .. PN .. .P
+.P P. .. .. .. .. .. PB
+.. .. .. .. .. .. BN R.
 ```""" }
 
 
@@ -1685,12 +1694,21 @@ markdownView taco blog =
 
 codeBlock : Taco -> { body : String, language : Maybe String } -> Element GlobalMsg
 codeBlock taco details =
-    case Parser.run parsePosition details.body of
+    case Parser.run parseLibrary details.body of
         Err _ ->
-            Element.text "Error: Make sure your input has the right shape!"
+            Element.text "There is an error in the position notation :-("
 
-        Ok position ->
-            loadPositionPreview taco position
+        Ok positions ->
+            let
+                positionPreviews =
+                    List.map (loadPositionPreview taco) positions
+
+                rows =
+                    List.greedyGroupsOf 3 positionPreviews
+            in
+            Element.column [ spacing 10, centerX ]
+                (rows |> List.map (\group -> Element.row [ spacing 10 ] group))
+                |> Element.map (\_ -> EditorMsgWrapper NoOp)
 
 
 renderer : Taco -> Markdown.Parser.Renderer (Element GlobalMsg)
@@ -1765,6 +1783,7 @@ heading { level, rawText, children } =
         children
 
 
+rawTextToId : String -> String
 rawTextToId rawText =
     rawText
         |> String.toLower
