@@ -30,6 +30,7 @@ import Pivot as P exposing (Pivot)
 import Ports
 import RemoteData exposing (WebData)
 import Sako
+import StaticText
 import Svg exposing (Svg)
 import Svg.Attributes
 import Task
@@ -55,7 +56,8 @@ type alias Model =
 
 
 type Page
-    = EditorPage
+    = MainPage
+    | EditorPage
     | LibraryPage
     | BlogPage
 
@@ -277,8 +279,7 @@ type GlobalMsg
     = EditorMsgWrapper Msg
     | BlogMsgWrapper BlogEditorMsg
     | LoadIntoEditor PacoPosition
-    | OpenLibraryPage
-    | OpenBlogPage
+    | OpenPage Page
     | WhiteSideColor Pieces.SideColor
     | BlackSideColor Pieces.SideColor
     | GetLibrarySuccess String
@@ -354,31 +355,7 @@ initialEditor flags =
 
 initialBlog : Blog
 initialBlog =
-    { text = """# Markdown editor with Paco Ŝako support
-
-There are many details about Paco Ŝako that I would love to discuss. Having a way to write and share articles on Paco Ŝako online would greatly contribute this. In this editor you can use [Github flavored Markdown](https://guides.github.com/features/mastering-markdown/) to write articles on Paco Ŝako.
-
-We have replaced code blocks with rendered Paco Ŝako positions. You can create positions in the editor and then create a blog post based on it.
-
-```
-.. R. .. RR .. .. QQ ..
-.. .. .. .. PB .. .P P.
-.. .. PP .. .. .N .. ..
-K. .. .P .. .P NP B. ..
-P. .. .. .. .P PP .. P.
-.R .. P. .. .. .. .K ..
-B. .P .. .. .. .. N. ..
-.. .. .. .. .N .. .. PB
--
-N. .. .. .. .. .. .. .R
-.Q PP .. .. P. P. .. ..
-.. .. .P .. .. .K .. ..
-.. .. .. .. PP K. N. ..
-.. .. .P .. B. .B QP ..
-P. .P R. .R .. PN .. .P
-.P P. .. .. .. .. .. PB
-.. .. .. .. .. .. BN R.
-```""" }
+    { text = StaticText.blogEditorExampleText }
 
 
 initialTaco : Taco
@@ -402,7 +379,7 @@ sizeDecoder =
 init : Decode.Value -> ( Model, Cmd GlobalMsg )
 init flags =
     ( { taco = initialTaco
-      , page = BlogPage
+      , page = MainPage
       , editor = initialEditor flags
       , blog = initialBlog
       , exampleFile = RemoteData.Loading
@@ -475,11 +452,8 @@ update msg model =
         GetLibraryFailure error ->
             ( { model | exampleFile = RemoteData.Failure error }, Cmd.none )
 
-        OpenLibraryPage ->
-            ( { model | page = LibraryPage }, Cmd.none )
-
-        OpenBlogPage ->
-            ( { model | page = BlogPage }, Cmd.none )
+        OpenPage newPage ->
+            ( { model | page = newPage }, Cmd.none )
 
 
 {-| Helper function to update the color scheme inside the taco.
@@ -801,6 +775,9 @@ view model =
 globalUi : Model -> Element GlobalMsg
 globalUi model =
     case model.page of
+        MainPage ->
+            mainPageUi model.taco
+
         EditorPage ->
             editorUi model.taco model.editor
 
@@ -811,11 +788,76 @@ globalUi model =
             blogUi model.taco model.blog
 
 
+type alias PageHeaderInfo =
+    { currentPage : Page
+    , targetPage : Page
+    , caption : String
+    }
+
+
+{-| Header that is shared by all pages.
+-}
+pageHeader : Page -> Element GlobalMsg
+pageHeader currentPage =
+    Element.row [ width fill, Background.color (Element.rgb255 230 230 230) ]
+        [ pageHeaderButton [ Font.bold ]
+            { currentPage = currentPage, targetPage = MainPage, caption = "Paco Ŝako Tools" }
+        , pageHeaderButton [] { currentPage = currentPage, targetPage = EditorPage, caption = "Position Editor" }
+        , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Example Positions" }
+        , pageHeaderButton [] { currentPage = currentPage, targetPage = BlogPage, caption = "Blog Editor" }
+        , el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
+        ]
+
+
+pageHeaderButton : List (Element.Attribute GlobalMsg) -> PageHeaderInfo -> Element GlobalMsg
+pageHeaderButton attributes { currentPage, targetPage, caption } =
+    if currentPage == targetPage then
+        el ([ padding 10, Background.color (Element.rgb255 200 200 200) ] ++ attributes) (Element.text caption)
+
+    else
+        el ([ padding 10, Events.onClick (OpenPage targetPage) ] ++ attributes) (Element.text caption)
+
+
+
+--------------------------------------------------------------------------------
+-- Main Page viev --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+mainPageUi : Taco -> Element GlobalMsg
+mainPageUi taco =
+    Element.column [ width fill ]
+        [ pageHeader MainPage
+        , greetingText taco
+        ]
+
+
+greetingText : Taco -> Element GlobalMsg
+greetingText taco =
+    case markdownView taco StaticText.mainPageGreetingText of
+        Ok rendered ->
+            Element.column
+                [ Element.spacing 30
+                , Element.padding 80
+                , Element.width (Element.fill |> Element.maximum 1000)
+                , Element.centerX
+                ]
+                rendered
+
+        Err errors ->
+            Element.text errors
+
+
+
+--------------------------------------------------------------------------------
+-- Library viev ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
 libraryUi : Taco -> Model -> Element GlobalMsg
 libraryUi taco model =
-    Element.column [ padding 5, spacing 5 ]
-        [ Element.el [ Font.size 30 ] (Element.text "Paco Ŝako Editor")
-        , el [ Events.onClick OpenBlogPage ] (Element.text "Open Blog editor")
+    Element.column [ spacing 5, width fill ]
+        [ pageHeader LibraryPage
         , Element.text "Choose an initial board position to open the editor."
         , Element.el [ Font.size 24 ] (Element.text "Start new")
         , Element.row [ spacing 5 ]
@@ -871,10 +913,14 @@ loadPositionPreview taco position =
 
 editorUi : Taco -> Editor -> Element GlobalMsg
 editorUi taco model =
-    Element.row [ width fill, height fill ]
-        [ Element.html FontAwesome.Styles.css
-        , positionView taco model (P.getC model.game) model.drag |> Element.map EditorMsgWrapper
-        , sidebar taco model
+    Element.column [ width fill ]
+        [ pageHeader EditorPage
+        , Element.row
+            [ width fill, height fill ]
+            [ Element.html FontAwesome.Styles.css
+            , positionView taco model (P.getC model.game) model.drag |> Element.map EditorMsgWrapper
+            , sidebar taco model
+            ]
         ]
 
 
@@ -922,8 +968,7 @@ positionView taco model position drag =
 sidebar : Taco -> Editor -> Element GlobalMsg
 sidebar taco model =
     Element.column [ width fill, height fill, spacing 10, padding 10 ]
-        [ Element.el [ Font.size 24 ] (Element.text "Paco Ŝako Editor")
-        , Element.el [ Events.onClick (Reset initialPosition) ]
+        [ Element.el [ Events.onClick (Reset initialPosition) ]
             (Element.text "Reset to starting position.")
             |> Element.map EditorMsgWrapper
         , Element.el [ Events.onClick (Reset emptyPosition) ]
@@ -1659,7 +1704,7 @@ sepBy content separator =
 blogUi : Taco -> Blog -> Element GlobalMsg
 blogUi taco blog =
     Element.column [ width fill ]
-        [ el [ Events.onClick OpenLibraryPage ] (Element.text "Return to home")
+        [ pageHeader BlogPage
         , Element.row [ Element.width Element.fill ]
             [ Input.multiline [ Element.width (Element.px 600) ]
                 { onChange = OnMarkdownInput >> BlogMsgWrapper
@@ -1668,7 +1713,7 @@ blogUi taco blog =
                 , label = Input.labelHidden "Markdown input"
                 , spellcheck = False
                 }
-            , case markdownView taco blog of
+            , case markdownView taco blog.text of
                 Ok rendered ->
                     Element.column
                         [ Element.spacing 30
@@ -1684,9 +1729,9 @@ blogUi taco blog =
         ]
 
 
-markdownView : Taco -> Blog -> Result String (List (Element GlobalMsg))
-markdownView taco blog =
-    blog.text
+markdownView : Taco -> String -> Result String (List (Element GlobalMsg))
+markdownView taco content =
+    content
         |> Markdown.Parser.parse
         |> Result.mapError (\error -> error |> List.map Markdown.Parser.deadEndToString |> String.join "\n")
         |> Result.andThen (Markdown.Parser.render (renderer taco))
