@@ -386,7 +386,7 @@ init flags =
       }
     , Http.get
         { expect = Http.expectString expectLibrary
-        , url = "/static/examples.txt"
+        , url = "static/examples.txt"
         }
     )
 
