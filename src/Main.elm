@@ -970,14 +970,7 @@ positionView taco model position drag =
 sidebar : Taco -> Editor -> Element GlobalMsg
 sidebar taco model =
     Element.column [ width fill, height fill, spacing 10, padding 10 ]
-        [ Element.el [ Events.onClick (Reset initialPosition) ]
-            (Element.text "Reset to starting position.")
-            |> Element.map EditorMsgWrapper
-        , Element.el [ Events.onClick (Reset emptyPosition) ]
-            (Element.text "Clear board.")
-            |> Element.map EditorMsgWrapper
-        , undo model.game |> Element.map EditorMsgWrapper
-        , redo model.game |> Element.map EditorMsgWrapper
+        [ sidebarActionButtons model.game |> Element.map EditorMsgWrapper
         , toolConfig model |> Element.map EditorMsgWrapper
         , colorSchemeConfigWhite taco
         , colorSchemeConfigBlack taco
@@ -987,15 +980,33 @@ sidebar taco model =
         ]
 
 
+sidebarActionButtons : Pivot PacoPosition -> Element Msg
+sidebarActionButtons p =
+    Element.row [ width fill ]
+        [ undo p
+        , redo p
+        , resetStartingBoard p
+        , resetClearBoard p
+        ]
+
+
+flatButton : Maybe a -> Element a -> Element a
+flatButton onPress content =
+    Input.button [ padding 10 ]
+        { onPress = onPress
+        , label = content
+        }
+
+
 {-| The undo button.
 -}
 undo : Pivot a -> Element Msg
 undo p =
     if P.hasL p then
-        Element.el [ Events.onClick Undo ] (Element.text "Undo")
+        flatButton (Just Undo) (icon [] Solid.arrowLeft)
 
     else
-        Element.text "Can't undo."
+        flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.arrowLeft)
 
 
 {-| The redo button.
@@ -1003,10 +1014,28 @@ undo p =
 redo : Pivot a -> Element Msg
 redo p =
     if P.hasR p then
-        Element.el [ Events.onClick Redo ] (Element.text "Redo")
+        flatButton (Just Redo) (icon [] Solid.arrowRight)
 
     else
-        Element.text "Can't redo."
+        flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.arrowRight)
+
+
+resetStartingBoard : Pivot PacoPosition -> Element Msg
+resetStartingBoard p =
+    if P.getC p /= initialPosition then
+        flatButton (Just (Reset initialPosition)) (icon [] Solid.home)
+
+    else
+        flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.home)
+
+
+resetClearBoard : Pivot PacoPosition -> Element Msg
+resetClearBoard p =
+    if P.getC p /= emptyPosition then
+        flatButton (Just (Reset emptyPosition)) (icon [] Solid.broom)
+
+    else
+        flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.broom)
 
 
 toolConfig : Editor -> Element Msg
