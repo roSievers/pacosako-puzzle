@@ -905,6 +905,7 @@ loadPositionPreview taco position =
                 , sideLength = 250
                 , drag = DragOff
                 , viewMode = CleanBoard
+                , nodeId = Nothing
                 }
             )
             |> Element.map EditorMsgWrapper
@@ -952,6 +953,7 @@ positionView taco model position drag =
                         , sideLength = windowHeight - windowSafetyMargin
                         , drag = drag
                         , viewMode = ShowNumbers
+                        , nodeId = Just sakoEditorId
                         }
                     ]
                 )
@@ -1259,16 +1261,28 @@ positionSvg :
     , colorScheme : Pieces.ColorScheme
     , drag : DragState
     , viewMode : ViewMode
+    , nodeId : Maybe String
     }
     -> Html Msg
 positionSvg config =
-    Svg.svg
-        [ Svg.Attributes.width <| String.fromInt config.sideLength
-        , Svg.Attributes.height <| String.fromInt config.sideLength
-        , viewBox (boardViewBox config.viewMode)
-        , Svg.Attributes.id sakoEditorId
-        ]
-        [ board
+    let
+        idAttribute =
+            case config.nodeId of
+                Just nodeId ->
+                    [ Svg.Attributes.id sakoEditorId ]
+
+                Nothing ->
+                    []
+
+        attributes =
+            [ Svg.Attributes.width <| String.fromInt config.sideLength
+            , Svg.Attributes.height <| String.fromInt config.sideLength
+            , viewBox (boardViewBox config.viewMode)
+            ]
+                ++ idAttribute
+    in
+    Svg.svg attributes
+        [ board config.viewMode
         , dragHints config.drag
         , piecesSvg config.colorScheme config.position
         ]
@@ -1308,10 +1322,35 @@ pieceSvg colorScheme piece =
         ]
 
 
-board : Svg msg
-board =
+board : ViewMode -> Svg msg
+board mode =
+    let
+        decoration =
+            case mode of
+                ShowNumbers ->
+                    [ columnTag "a" "50"
+                    , columnTag "b" "150"
+                    , columnTag "c" "250"
+                    , columnTag "d" "350"
+                    , columnTag "e" "450"
+                    , columnTag "f" "550"
+                    , columnTag "g" "650"
+                    , columnTag "h" "750"
+                    , rowTag "1" "770"
+                    , rowTag "2" "670"
+                    , rowTag "3" "570"
+                    , rowTag "4" "470"
+                    , rowTag "5" "370"
+                    , rowTag "6" "270"
+                    , rowTag "7" "170"
+                    , rowTag "8" "70"
+                    ]
+
+                CleanBoard ->
+                    []
+    in
     Svg.g []
-        [ Svg.rect
+        ([ Svg.rect
             [ Svg.Attributes.x "-10"
             , Svg.Attributes.y "-10"
             , Svg.Attributes.width "820"
@@ -1319,7 +1358,7 @@ board =
             , Svg.Attributes.fill "#242"
             ]
             []
-        , Svg.rect
+         , Svg.rect
             [ Svg.Attributes.x "0"
             , Svg.Attributes.y "0"
             , Svg.Attributes.width "800"
@@ -1327,28 +1366,14 @@ board =
             , Svg.Attributes.fill "#595"
             ]
             []
-        , Svg.path
+         , Svg.path
             [ Svg.Attributes.d "M 0,0 H 800 V 100 H 0 Z M 0,200 H 800 V 300 H 0 Z M 0,400 H 800 V 500 H 0 Z M 0,600 H 800 V 700 H 0 Z M 100,0 V 800 H 200 V 0 Z M 300,0 V 800 H 400 V 0 Z M 500,0 V 800 H 600 V 0 Z M 700,0 V 800 H 800 V 0 Z"
             , Svg.Attributes.fill "#9F9"
             ]
             []
-        , columnTag "a" "50"
-        , columnTag "b" "150"
-        , columnTag "c" "250"
-        , columnTag "d" "350"
-        , columnTag "e" "450"
-        , columnTag "f" "550"
-        , columnTag "g" "650"
-        , columnTag "h" "750"
-        , rowTag "1" "770"
-        , rowTag "2" "670"
-        , rowTag "3" "570"
-        , rowTag "4" "470"
-        , rowTag "5" "370"
-        , rowTag "6" "270"
-        , rowTag "7" "170"
-        , rowTag "8" "70"
-        ]
+         ]
+            ++ decoration
+        )
 
 
 columnTag : String -> String -> Svg msg
@@ -1444,6 +1469,7 @@ parsedMarkdownPaste taco model =
                         , sideLength = 100
                         , drag = DragOff
                         , viewMode = CleanBoard
+                        , nodeId = Nothing
                         }
                     )
                 , Element.text "Load"
