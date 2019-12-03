@@ -78,6 +78,7 @@ type alias Editor =
     , createToolType : Sako.Type
     , userPaste : String
     , pasteParsed : PositionParseResult
+    , viewMode : ViewMode
     }
 
 
@@ -310,6 +311,7 @@ type Msg
     | NoOp
     | UpdateUserPaste String
     | UseUserPaste PacoPosition
+    | SetViewMode ViewMode
 
 
 type BlogEditorMsg
@@ -351,6 +353,7 @@ initialEditor flags =
     , createToolType = Sako.Pawn
     , userPaste = ""
     , pasteParsed = NoInput
+    , viewMode = ShowNumbers
     }
 
 
@@ -574,6 +577,9 @@ updateEditor msg model =
 
         UseUserPaste newPosition ->
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+
+        SetViewMode newViewMode ->
+            ( { model | viewMode = newViewMode }, Cmd.none )
 
 
 applyUndo : Editor -> Editor
@@ -915,7 +921,7 @@ loadPositionPreview taco position =
 
 editorUi : Taco -> Editor -> Element GlobalMsg
 editorUi taco model =
-    Element.column [ width fill ]
+    Element.column [ width fill, height fill ]
         [ pageHeader EditorPage
         , Element.row
             [ width fill, height fill ]
@@ -930,14 +936,14 @@ editorUi taco model =
 -}
 windowSafetyMargin : Int
 windowSafetyMargin =
-    10
+    50
 
 
 positionView : Taco -> Editor -> PacoPosition -> DragState -> Element Msg
-positionView taco model position drag =
+positionView taco editor position drag =
     let
         ( _, windowHeight ) =
-            model.windowSize
+            editor.windowSize
     in
     el [ width (Element.px windowHeight), height fill, centerX ]
         (el [ centerX, centerY ]
@@ -953,7 +959,7 @@ positionView taco model position drag =
                         , colorScheme = taco.colorScheme
                         , sideLength = windowHeight - windowSafetyMargin
                         , drag = drag
-                        , viewMode = ShowNumbers
+                        , viewMode = editor.viewMode
                         , nodeId = Just sakoEditorId
                         }
                     ]
@@ -974,6 +980,7 @@ sidebar taco model =
         [ sidebarActionButtons model.game |> Element.map EditorMsgWrapper
         , toolConfig model |> Element.map EditorMsgWrapper
         , colorSchemeConfig taco
+        , viewModeConfig model
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg") |> Element.map EditorMsgWrapper
         , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png") |> Element.map EditorMsgWrapper
         , markdownCopyPaste taco model |> Element.map EditorMsgWrapper
@@ -1215,6 +1222,14 @@ colorSchemeConfigBlack taco =
         , colorPicker BlackSideColor taco.colorScheme.black Pieces.purplePieceColor
         , colorPicker BlackSideColor taco.colorScheme.black Pieces.pinkPieceColor
         , colorPicker BlackSideColor taco.colorScheme.black Pieces.blackPieceColor
+        ]
+
+
+viewModeConfig : Editor -> Element GlobalMsg
+viewModeConfig editor =
+    Element.wrappedRow [ spacing 5 ]
+        [ toolConfigOption editor.viewMode (SetViewMode >> EditorMsgWrapper) ShowNumbers "Show numbers"
+        , toolConfigOption editor.viewMode (SetViewMode >> EditorMsgWrapper) CleanBoard "Hide numbers"
         ]
 
 
