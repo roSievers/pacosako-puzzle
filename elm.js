@@ -6421,6 +6421,7 @@ var $author$project$Main$DragOff = {$: 'DragOff'};
 var $author$project$Main$MoveTool = {$: 'MoveTool'};
 var $author$project$Main$NoInput = {$: 'NoInput'};
 var $author$project$Sako$Pawn = {$: 'Pawn'};
+var $author$project$Main$ShowNumbers = {$: 'ShowNumbers'};
 var $author$project$Sako$White = {$: 'White'};
 var $author$project$Sako$Bishop = {$: 'Bishop'};
 var $author$project$Sako$Black = {$: 'Black'};
@@ -6654,6 +6655,7 @@ var $author$project$Main$initialEditor = function (flags) {
 		pasteParsed: $author$project$Main$NoInput,
 		tool: $author$project$Main$MoveTool,
 		userPaste: '',
+		viewMode: $author$project$Main$ShowNumbers,
 		windowSize: $author$project$Main$parseWindowSize(flags)
 	};
 };
@@ -8075,7 +8077,6 @@ var $author$project$Main$keyUp = F2(
 var $author$project$Main$Dragging = function (a) {
 	return {$: 'Dragging', a: a};
 };
-var $author$project$Main$ShowNumbers = {$: 'ShowNumbers'};
 var $author$project$Main$SvgCoord = F2(
 	function (a, b) {
 		return {$: 'SvgCoord', a: a, b: b};
@@ -8326,7 +8327,7 @@ var $author$project$Main$updateEditor = F2(
 							userPaste: pasteContent
 						}),
 					$elm$core$Platform$Cmd$none);
-			default:
+			case 'UseUserPaste':
 				var newPosition = msg.a;
 				return _Utils_Tuple2(
 					_Utils_update(
@@ -8334,6 +8335,13 @@ var $author$project$Main$updateEditor = F2(
 						{
 							game: A2($author$project$Main$addHistoryState, newPosition, model.game)
 						}),
+					$elm$core$Platform$Cmd$none);
+			default:
+				var newViewMode = msg.a;
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{viewMode: newViewMode}),
 					$elm$core$Platform$Cmd$none);
 		}
 	});
@@ -16394,58 +16402,71 @@ var $author$project$Main$rowTag = F2(
 				]));
 	});
 var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
-var $author$project$Main$board = A2(
-	$elm$svg$Svg$g,
-	_List_Nil,
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$rect,
+var $author$project$Main$board = function (mode) {
+	var decoration = function () {
+		if (mode.$ === 'ShowNumbers') {
+			return _List_fromArray(
+				[
+					A2($author$project$Main$columnTag, 'a', '50'),
+					A2($author$project$Main$columnTag, 'b', '150'),
+					A2($author$project$Main$columnTag, 'c', '250'),
+					A2($author$project$Main$columnTag, 'd', '350'),
+					A2($author$project$Main$columnTag, 'e', '450'),
+					A2($author$project$Main$columnTag, 'f', '550'),
+					A2($author$project$Main$columnTag, 'g', '650'),
+					A2($author$project$Main$columnTag, 'h', '750'),
+					A2($author$project$Main$rowTag, '1', '770'),
+					A2($author$project$Main$rowTag, '2', '670'),
+					A2($author$project$Main$rowTag, '3', '570'),
+					A2($author$project$Main$rowTag, '4', '470'),
+					A2($author$project$Main$rowTag, '5', '370'),
+					A2($author$project$Main$rowTag, '6', '270'),
+					A2($author$project$Main$rowTag, '7', '170'),
+					A2($author$project$Main$rowTag, '8', '70')
+				]);
+		} else {
+			return _List_Nil;
+		}
+	}();
+	return A2(
+		$elm$svg$Svg$g,
+		_List_Nil,
+		_Utils_ap(
 			_List_fromArray(
 				[
-					$elm$svg$Svg$Attributes$x('-10'),
-					$elm$svg$Svg$Attributes$y('-10'),
-					$elm$svg$Svg$Attributes$width('820'),
-					$elm$svg$Svg$Attributes$height('820'),
-					$elm$svg$Svg$Attributes$fill('#242')
+					A2(
+					$elm$svg$Svg$rect,
+					_List_fromArray(
+						[
+							$elm$svg$Svg$Attributes$x('-10'),
+							$elm$svg$Svg$Attributes$y('-10'),
+							$elm$svg$Svg$Attributes$width('820'),
+							$elm$svg$Svg$Attributes$height('820'),
+							$elm$svg$Svg$Attributes$fill('#242')
+						]),
+					_List_Nil),
+					A2(
+					$elm$svg$Svg$rect,
+					_List_fromArray(
+						[
+							$elm$svg$Svg$Attributes$x('0'),
+							$elm$svg$Svg$Attributes$y('0'),
+							$elm$svg$Svg$Attributes$width('800'),
+							$elm$svg$Svg$Attributes$height('800'),
+							$elm$svg$Svg$Attributes$fill('#595')
+						]),
+					_List_Nil),
+					A2(
+					$elm$svg$Svg$path,
+					_List_fromArray(
+						[
+							$elm$svg$Svg$Attributes$d('M 0,0 H 800 V 100 H 0 Z M 0,200 H 800 V 300 H 0 Z M 0,400 H 800 V 500 H 0 Z M 0,600 H 800 V 700 H 0 Z M 100,0 V 800 H 200 V 0 Z M 300,0 V 800 H 400 V 0 Z M 500,0 V 800 H 600 V 0 Z M 700,0 V 800 H 800 V 0 Z'),
+							$elm$svg$Svg$Attributes$fill('#9F9')
+						]),
+					_List_Nil)
 				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$rect,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x('0'),
-					$elm$svg$Svg$Attributes$y('0'),
-					$elm$svg$Svg$Attributes$width('800'),
-					$elm$svg$Svg$Attributes$height('800'),
-					$elm$svg$Svg$Attributes$fill('#595')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$path,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$d('M 0,0 H 800 V 100 H 0 Z M 0,200 H 800 V 300 H 0 Z M 0,400 H 800 V 500 H 0 Z M 0,600 H 800 V 700 H 0 Z M 100,0 V 800 H 200 V 0 Z M 300,0 V 800 H 400 V 0 Z M 500,0 V 800 H 600 V 0 Z M 700,0 V 800 H 800 V 0 Z'),
-					$elm$svg$Svg$Attributes$fill('#9F9')
-				]),
-			_List_Nil),
-			A2($author$project$Main$columnTag, 'a', '50'),
-			A2($author$project$Main$columnTag, 'b', '150'),
-			A2($author$project$Main$columnTag, 'c', '250'),
-			A2($author$project$Main$columnTag, 'd', '350'),
-			A2($author$project$Main$columnTag, 'e', '450'),
-			A2($author$project$Main$columnTag, 'f', '550'),
-			A2($author$project$Main$columnTag, 'g', '650'),
-			A2($author$project$Main$columnTag, 'h', '750'),
-			A2($author$project$Main$rowTag, '1', '770'),
-			A2($author$project$Main$rowTag, '2', '670'),
-			A2($author$project$Main$rowTag, '3', '570'),
-			A2($author$project$Main$rowTag, '4', '470'),
-			A2($author$project$Main$rowTag, '5', '370'),
-			A2($author$project$Main$rowTag, '6', '270'),
-			A2($author$project$Main$rowTag, '7', '170'),
-			A2($author$project$Main$rowTag, '8', '70')
-		]));
+			decoration));
+};
 var $elm$svg$Svg$circle = $elm$svg$Svg$trustedNode('circle');
 var $elm$svg$Svg$Attributes$cx = _VirtualDom_attribute('cx');
 var $elm$svg$Svg$Attributes$cy = _VirtualDom_attribute('cy');
@@ -16676,8 +16697,19 @@ var $author$project$Main$viewBox = function (rect) {
 				])));
 };
 var $author$project$Main$positionSvg = function (config) {
-	return A2(
-		$elm$svg$Svg$svg,
+	var idAttribute = function () {
+		var _v0 = config.nodeId;
+		if (_v0.$ === 'Just') {
+			var nodeId = _v0.a;
+			return _List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$id(nodeId)
+				]);
+		} else {
+			return _List_Nil;
+		}
+	}();
+	var attributes = _Utils_ap(
 		_List_fromArray(
 			[
 				$elm$svg$Svg$Attributes$width(
@@ -16685,12 +16717,15 @@ var $author$project$Main$positionSvg = function (config) {
 				$elm$svg$Svg$Attributes$height(
 				$elm$core$String$fromInt(config.sideLength)),
 				$author$project$Main$viewBox(
-				$author$project$Main$boardViewBox(config.viewMode)),
-				$elm$svg$Svg$Attributes$id($author$project$Main$sakoEditorId)
+				$author$project$Main$boardViewBox(config.viewMode))
 			]),
+		idAttribute);
+	return A2(
+		$elm$svg$Svg$svg,
+		attributes,
 		_List_fromArray(
 			[
-				$author$project$Main$board,
+				$author$project$Main$board(config.viewMode),
 				$author$project$Main$dragHints(config.drag),
 				A2($author$project$Main$piecesSvg, config.colorScheme, config.position)
 			]));
@@ -16709,7 +16744,7 @@ var $author$project$Main$loadPositionPreview = F2(
 				$author$project$Main$EditorMsgWrapper,
 				$mdgriffith$elm_ui$Element$html(
 					$author$project$Main$positionSvg(
-						{colorScheme: taco.colorScheme, drag: $author$project$Main$DragOff, position: position, sideLength: 250, viewMode: $author$project$Main$CleanBoard}))));
+						{colorScheme: taco.colorScheme, drag: $author$project$Main$DragOff, nodeId: $elm$core$Maybe$Nothing, position: position, sideLength: 250, viewMode: $author$project$Main$CleanBoard}))));
 	});
 var $mdgriffith$elm_ui$Internal$Model$AsRow = {$: 'AsRow'};
 var $mdgriffith$elm_ui$Internal$Model$asRow = $mdgriffith$elm_ui$Internal$Model$AsRow;
@@ -18489,10 +18524,10 @@ var $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onWithOptions = F3(
 var $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onDown = A2($mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onWithOptions, 'mousedown', $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$defaultOptions);
 var $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onMove = A2($mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onWithOptions, 'mousemove', $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$defaultOptions);
 var $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onUp = A2($mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$onWithOptions, 'mouseup', $mpizenberg$elm_pointer_events$Html$Events$Extra$Mouse$defaultOptions);
-var $author$project$Main$windowSafetyMargin = 10;
+var $author$project$Main$windowSafetyMargin = 50;
 var $author$project$Main$positionView = F4(
-	function (taco, model, position, drag) {
-		var _v0 = model.windowSize;
+	function (taco, editor, position, drag) {
+		var _v0 = editor.windowSize;
 		var windowHeight = _v0.b;
 		return A2(
 			$mdgriffith$elm_ui$Element$el,
@@ -18500,7 +18535,8 @@ var $author$project$Main$positionView = F4(
 				[
 					$mdgriffith$elm_ui$Element$width(
 					$mdgriffith$elm_ui$Element$px(windowHeight)),
-					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$fill)
+					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$fill),
+					$mdgriffith$elm_ui$Element$centerX
 				]),
 			A2(
 				$mdgriffith$elm_ui$Element$el,
@@ -18519,11 +18555,20 @@ var $author$project$Main$positionView = F4(
 						_List_fromArray(
 							[
 								$author$project$Main$positionSvg(
-								{colorScheme: taco.colorScheme, drag: drag, position: position, sideLength: windowHeight - $author$project$Main$windowSafetyMargin, viewMode: $author$project$Main$ShowNumbers})
+								{
+									colorScheme: taco.colorScheme,
+									drag: drag,
+									nodeId: $elm$core$Maybe$Just($author$project$Main$sakoEditorId),
+									position: position,
+									sideLength: windowHeight - $author$project$Main$windowSafetyMargin,
+									viewMode: editor.viewMode
+								})
 							])))));
 	});
 var $author$project$Main$DownloadPng = {$: 'DownloadPng'};
 var $author$project$Main$DownloadSvg = {$: 'DownloadSvg'};
+var $mdgriffith$elm_ui$Internal$Model$Right = {$: 'Right'};
+var $mdgriffith$elm_ui$Element$alignRight = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$Right);
 var $author$project$Main$BlackSideColor = function (a) {
 	return {$: 'BlackSideColor', a: a};
 };
@@ -18531,607 +18576,17 @@ var $author$project$Pieces$bluePieceColor = {
 	fill: _Utils_Tuple3(50, 50, 255),
 	stroke: _Utils_Tuple3(50, 50, 150)
 };
+var $lattyware$elm_fontawesome$FontAwesome$Icon$Icon = F5(
+	function (prefix, name, width, height, path) {
+		return {height: height, name: name, path: path, prefix: prefix, width: width};
+	});
+var $lattyware$elm_fontawesome$FontAwesome$Regular$circle = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'far', 'circle', 512, 512, 'M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200z');
 var $author$project$Pieces$colorUi = function (_v0) {
 	var r = _v0.a;
 	var g = _v0.b;
 	var b = _v0.c;
 	return A3($mdgriffith$elm_ui$Element$rgb255, r, g, b);
 };
-var $author$project$Main$colorPicker = F4(
-	function (msg, currentColor, newColor, colorName) {
-		var selectionAttributes = _Utils_eq(currentColor, newColor) ? _List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$Border$width(4),
-				$mdgriffith$elm_ui$Element$Font$bold
-			]) : _List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$Border$width(2)
-			]);
-		var baseAttributes = _List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
-				$mdgriffith$elm_ui$Element$padding(5),
-				$mdgriffith$elm_ui$Element$Events$onClick(
-				msg(newColor)),
-				$mdgriffith$elm_ui$Element$Background$color(
-				$author$project$Pieces$colorUi(newColor.fill)),
-				$mdgriffith$elm_ui$Element$Border$color(
-				$author$project$Pieces$colorUi(newColor.stroke))
-			]);
-		return A2(
-			$mdgriffith$elm_ui$Element$el,
-			_Utils_ap(baseAttributes, selectionAttributes),
-			$mdgriffith$elm_ui$Element$text(colorName));
-	});
-var $author$project$Pieces$greenPieceColor = {
-	fill: _Utils_Tuple3(50, 255, 50),
-	stroke: _Utils_Tuple3(50, 150, 50)
-};
-var $author$project$Pieces$orangePieceColor = {
-	fill: _Utils_Tuple3(255, 150, 50),
-	stroke: _Utils_Tuple3(150, 100, 50)
-};
-var $author$project$Pieces$pinkPieceColor = {
-	fill: _Utils_Tuple3(255, 50, 255),
-	stroke: _Utils_Tuple3(150, 50, 150)
-};
-var $author$project$Pieces$purplePieceColor = {
-	fill: _Utils_Tuple3(150, 0, 255),
-	stroke: _Utils_Tuple3(140, 0, 150)
-};
-var $author$project$Pieces$redPieceColor = {
-	fill: _Utils_Tuple3(255, 50, 50),
-	stroke: _Utils_Tuple3(150, 50, 50)
-};
-var $mdgriffith$elm_ui$Internal$Model$Padding = F5(
-	function (a, b, c, d, e) {
-		return {$: 'Padding', a: a, b: b, c: c, d: d, e: e};
-	});
-var $mdgriffith$elm_ui$Internal$Model$Spaced = F3(
-	function (a, b, c) {
-		return {$: 'Spaced', a: a, b: b, c: c};
-	});
-var $mdgriffith$elm_ui$Internal$Model$extractSpacingAndPadding = function (attrs) {
-	return A3(
-		$elm$core$List$foldr,
-		F2(
-			function (attr, _v0) {
-				var pad = _v0.a;
-				var spacing = _v0.b;
-				return _Utils_Tuple2(
-					function () {
-						if (pad.$ === 'Just') {
-							var x = pad.a;
-							return pad;
-						} else {
-							if ((attr.$ === 'StyleClass') && (attr.b.$ === 'PaddingStyle')) {
-								var _v3 = attr.b;
-								var name = _v3.a;
-								var t = _v3.b;
-								var r = _v3.c;
-								var b = _v3.d;
-								var l = _v3.e;
-								return $elm$core$Maybe$Just(
-									A5($mdgriffith$elm_ui$Internal$Model$Padding, name, t, r, b, l));
-							} else {
-								return $elm$core$Maybe$Nothing;
-							}
-						}
-					}(),
-					function () {
-						if (spacing.$ === 'Just') {
-							var x = spacing.a;
-							return spacing;
-						} else {
-							if ((attr.$ === 'StyleClass') && (attr.b.$ === 'SpacingStyle')) {
-								var _v6 = attr.b;
-								var name = _v6.a;
-								var x = _v6.b;
-								var y = _v6.c;
-								return $elm$core$Maybe$Just(
-									A3($mdgriffith$elm_ui$Internal$Model$Spaced, name, x, y));
-							} else {
-								return $elm$core$Maybe$Nothing;
-							}
-						}
-					}());
-			}),
-		_Utils_Tuple2($elm$core$Maybe$Nothing, $elm$core$Maybe$Nothing),
-		attrs);
-};
-var $mdgriffith$elm_ui$Element$wrappedRow = F2(
-	function (attrs, children) {
-		var _v0 = $mdgriffith$elm_ui$Internal$Model$extractSpacingAndPadding(attrs);
-		var padded = _v0.a;
-		var spaced = _v0.b;
-		if (spaced.$ === 'Nothing') {
-			return A4(
-				$mdgriffith$elm_ui$Internal$Model$element,
-				$mdgriffith$elm_ui$Internal$Model$asRow,
-				$mdgriffith$elm_ui$Internal$Model$div,
-				A2(
-					$elm$core$List$cons,
-					$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
-					A2(
-						$elm$core$List$cons,
-						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
-						A2(
-							$elm$core$List$cons,
-							$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
-							attrs))),
-				$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
-		} else {
-			var _v2 = spaced.a;
-			var spaceName = _v2.a;
-			var x = _v2.b;
-			var y = _v2.c;
-			var newPadding = function () {
-				if (padded.$ === 'Just') {
-					var _v5 = padded.a;
-					var name = _v5.a;
-					var t = _v5.b;
-					var r = _v5.c;
-					var b = _v5.d;
-					var l = _v5.e;
-					return ((_Utils_cmp(r, (x / 2) | 0) > -1) && (_Utils_cmp(b, (y / 2) | 0) > -1)) ? $elm$core$Maybe$Just(
-						$mdgriffith$elm_ui$Element$paddingEach(
-							{bottom: b - ((y / 2) | 0), left: l - ((x / 2) | 0), right: r - ((x / 2) | 0), top: t - ((y / 2) | 0)})) : $elm$core$Maybe$Nothing;
-				} else {
-					return $elm$core$Maybe$Nothing;
-				}
-			}();
-			if (newPadding.$ === 'Just') {
-				var pad = newPadding.a;
-				return A4(
-					$mdgriffith$elm_ui$Internal$Model$element,
-					$mdgriffith$elm_ui$Internal$Model$asRow,
-					$mdgriffith$elm_ui$Internal$Model$div,
-					A2(
-						$elm$core$List$cons,
-						$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
-						A2(
-							$elm$core$List$cons,
-							$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
-							A2(
-								$elm$core$List$cons,
-								$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
-								_Utils_ap(
-									attrs,
-									_List_fromArray(
-										[pad]))))),
-					$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
-			} else {
-				var halfY = -(y / 2);
-				var halfX = -(x / 2);
-				return A4(
-					$mdgriffith$elm_ui$Internal$Model$element,
-					$mdgriffith$elm_ui$Internal$Model$asEl,
-					$mdgriffith$elm_ui$Internal$Model$div,
-					attrs,
-					$mdgriffith$elm_ui$Internal$Model$Unkeyed(
-						_List_fromArray(
-							[
-								A4(
-								$mdgriffith$elm_ui$Internal$Model$element,
-								$mdgriffith$elm_ui$Internal$Model$asRow,
-								$mdgriffith$elm_ui$Internal$Model$div,
-								A2(
-									$elm$core$List$cons,
-									$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
-									A2(
-										$elm$core$List$cons,
-										$mdgriffith$elm_ui$Internal$Model$Attr(
-											A2(
-												$elm$html$Html$Attributes$style,
-												'margin',
-												$elm$core$String$fromFloat(halfY) + ('px' + (' ' + ($elm$core$String$fromFloat(halfX) + 'px'))))),
-										A2(
-											$elm$core$List$cons,
-											$mdgriffith$elm_ui$Internal$Model$Attr(
-												A2(
-													$elm$html$Html$Attributes$style,
-													'width',
-													'calc(100% + ' + ($elm$core$String$fromInt(x) + 'px)'))),
-											A2(
-												$elm$core$List$cons,
-												$mdgriffith$elm_ui$Internal$Model$Attr(
-													A2(
-														$elm$html$Html$Attributes$style,
-														'height',
-														'calc(100% + ' + ($elm$core$String$fromInt(y) + 'px)'))),
-												A2(
-													$elm$core$List$cons,
-													A2(
-														$mdgriffith$elm_ui$Internal$Model$StyleClass,
-														$mdgriffith$elm_ui$Internal$Flag$spacing,
-														A3($mdgriffith$elm_ui$Internal$Model$SpacingStyle, spaceName, x, y)),
-													_List_Nil))))),
-								$mdgriffith$elm_ui$Internal$Model$Unkeyed(children))
-							])));
-			}
-		}
-	});
-var $author$project$Pieces$yellowPieceColor = {
-	fill: _Utils_Tuple3(255, 255, 50),
-	stroke: _Utils_Tuple3(150, 150, 50)
-};
-var $author$project$Main$colorSchemeConfigBlack = function (taco) {
-	return A2(
-		$mdgriffith$elm_ui$Element$wrappedRow,
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$spacing(2)
-			]),
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$text('Black pieces: '),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$whitePieceColor, 'white'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$redPieceColor, 'red'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$orangePieceColor, 'orange'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$yellowPieceColor, 'yellow'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$greenPieceColor, 'green'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$bluePieceColor, 'blue'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$purplePieceColor, 'purple'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$pinkPieceColor, 'pink'),
-				A4($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$blackPieceColor, 'black')
-			]));
-};
-var $author$project$Main$WhiteSideColor = function (a) {
-	return {$: 'WhiteSideColor', a: a};
-};
-var $author$project$Main$colorSchemeConfigWhite = function (taco) {
-	return A2(
-		$mdgriffith$elm_ui$Element$wrappedRow,
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$spacing(2)
-			]),
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$text('White pieces: '),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$whitePieceColor, 'white'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$redPieceColor, 'red'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$orangePieceColor, 'orange'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$yellowPieceColor, 'yellow'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$greenPieceColor, 'green'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$bluePieceColor, 'blue'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$purplePieceColor, 'purple'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$pinkPieceColor, 'pink'),
-				A4($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$blackPieceColor, 'black')
-			]));
-};
-var $author$project$Main$emptyPosition = {moveNumber: 0, pieces: _List_Nil};
-var $author$project$Main$UpdateUserPaste = function (a) {
-	return {$: 'UpdateUserPaste', a: a};
-};
-var $author$project$Main$tileFlat = function (_v0) {
-	var x = _v0.a;
-	var y = _v0.b;
-	return x + (8 * y);
-};
-var $author$project$Main$pacoPositionAsGrid = function (pieces) {
-	var colorTiles = function (filterColor) {
-		return $elm$core$Dict$fromList(
-			A2(
-				$elm$core$List$map,
-				function (piece) {
-					return _Utils_Tuple2(
-						$author$project$Main$tileFlat(piece.position),
-						piece.pieceType);
-				},
-				A2(
-					$elm$core$List$filter,
-					function (piece) {
-						return _Utils_eq(piece.color, filterColor);
-					},
-					pieces)));
-	};
-	return A6(
-		$elm$core$Dict$merge,
-		F3(
-			function (i, w, dict) {
-				return A3(
-					$elm$core$Dict$insert,
-					i,
-					$author$project$Main$WhiteTile(w),
-					dict);
-			}),
-		F4(
-			function (i, w, b, dict) {
-				return A3(
-					$elm$core$Dict$insert,
-					i,
-					A2($author$project$Main$PairTile, w, b),
-					dict);
-			}),
-		F3(
-			function (i, b, dict) {
-				return A3(
-					$elm$core$Dict$insert,
-					i,
-					$author$project$Main$BlackTile(b),
-					dict);
-			}),
-		colorTiles($author$project$Sako$White),
-		colorTiles($author$project$Sako$Black),
-		$elm$core$Dict$empty);
-};
-var $author$project$Main$markdownTypeChar = function (pieceType) {
-	switch (pieceType.$) {
-		case 'Pawn':
-			return 'P';
-		case 'Rock':
-			return 'R';
-		case 'Knight':
-			return 'N';
-		case 'Bishop':
-			return 'B';
-		case 'Queen':
-			return 'Q';
-		default:
-			return 'K';
-	}
-};
-var $author$project$Main$tileStateAsString = function (tileState) {
-	switch (tileState.$) {
-		case 'EmptyTile':
-			return '..';
-		case 'WhiteTile':
-			var w = tileState.a;
-			return $author$project$Main$markdownTypeChar(w) + '.';
-		case 'BlackTile':
-			var b = tileState.a;
-			return '.' + $author$project$Main$markdownTypeChar(b);
-		default:
-			var w = tileState.a;
-			var b = tileState.b;
-			return _Utils_ap(
-				$author$project$Main$markdownTypeChar(w),
-				$author$project$Main$markdownTypeChar(b));
-	}
-};
-var $author$project$Main$markdownExchangeNotation = function (pieces) {
-	var indices = _List_fromArray(
-		[
-			_List_fromArray(
-			[56, 57, 58, 59, 60, 61, 62, 63]),
-			_List_fromArray(
-			[48, 49, 50, 51, 52, 53, 54, 55]),
-			_List_fromArray(
-			[40, 41, 42, 43, 44, 45, 46, 47]),
-			_List_fromArray(
-			[32, 33, 34, 35, 36, 37, 38, 39]),
-			_List_fromArray(
-			[24, 25, 26, 27, 28, 29, 30, 31]),
-			_List_fromArray(
-			[16, 17, 18, 19, 20, 21, 22, 23]),
-			_List_fromArray(
-			[8, 9, 10, 11, 12, 13, 14, 15]),
-			_List_fromArray(
-			[0, 1, 2, 3, 4, 5, 6, 7])
-		]);
-	var dictRepresentation = $author$project$Main$pacoPositionAsGrid(pieces);
-	var tileEntry = function (i) {
-		return $author$project$Main$tileStateAsString(
-			A2(
-				$elm$core$Maybe$withDefault,
-				$author$project$Main$EmptyTile,
-				A2($elm$core$Dict$get, i, dictRepresentation)));
-	};
-	var markdownRow = function (indexRow) {
-		return A2(
-			$elm$core$String$join,
-			' ',
-			A2($elm$core$List$map, tileEntry, indexRow));
-	};
-	return A2(
-		$elm$core$String$join,
-		'\n',
-		A2($elm$core$List$map, markdownRow, indices));
-};
-var $mdgriffith$elm_ui$Internal$Model$Monospace = {$: 'Monospace'};
-var $mdgriffith$elm_ui$Element$Font$monospace = $mdgriffith$elm_ui$Internal$Model$Monospace;
-var $author$project$Main$UseUserPaste = function (a) {
-	return {$: 'UseUserPaste', a: a};
-};
-var $author$project$Main$parsedMarkdownPaste = F2(
-	function (taco, model) {
-		var _v0 = model.pasteParsed;
-		switch (_v0.$) {
-			case 'NoInput':
-				return $mdgriffith$elm_ui$Element$none;
-			case 'ParseError':
-				var error = _v0.a;
-				return $mdgriffith$elm_ui$Element$text(error);
-			default:
-				var pacoPosition = _v0.a;
-				return A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$Events$onClick(
-							$author$project$Main$UseUserPaste(pacoPosition)),
-							$mdgriffith$elm_ui$Element$spacing(5)
-						]),
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$html(
-							$author$project$Main$positionSvg(
-								{colorScheme: taco.colorScheme, drag: $author$project$Main$DragOff, position: pacoPosition, sideLength: 100, viewMode: $author$project$Main$CleanBoard})),
-							$mdgriffith$elm_ui$Element$text('Load')
-						]));
-		}
-	});
-var $mdgriffith$elm_ui$Element$Input$Placeholder = F2(
-	function (a, b) {
-		return {$: 'Placeholder', a: a, b: b};
-	});
-var $mdgriffith$elm_ui$Element$Input$placeholder = $mdgriffith$elm_ui$Element$Input$Placeholder;
-var $author$project$Main$markdownCopyPaste = F2(
-	function (taco, model) {
-		return A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(5)
-				]),
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$text('Text notation you can store'),
-					A2(
-					$mdgriffith$elm_ui$Element$Input$multiline,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$Font$family(
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$Font$monospace]))
-						]),
-					{
-						label: $mdgriffith$elm_ui$Element$Input$labelHidden('Copy this to a text document for later use.'),
-						onChange: function (_v0) {
-							return $author$project$Main$NoOp;
-						},
-						placeholder: $elm$core$Maybe$Nothing,
-						spellcheck: false,
-						text: $author$project$Main$markdownExchangeNotation(
-							$yotamDvir$elm_pivot$Pivot$getC(model.game).pieces)
-					}),
-					$mdgriffith$elm_ui$Element$text('Recover state from notation'),
-					A2(
-					$mdgriffith$elm_ui$Element$Input$multiline,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$Font$family(
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$Font$monospace]))
-						]),
-					{
-						label: $mdgriffith$elm_ui$Element$Input$labelHidden('Paste level notation as you see above.'),
-						onChange: $author$project$Main$UpdateUserPaste,
-						placeholder: $elm$core$Maybe$Just(
-							A2(
-								$mdgriffith$elm_ui$Element$Input$placeholder,
-								_List_Nil,
-								$mdgriffith$elm_ui$Element$text('Paste level notation.'))),
-						spellcheck: false,
-						text: model.userPaste
-					}),
-					A2($author$project$Main$parsedMarkdownPaste, taco, model)
-				]));
-	});
-var $author$project$Main$Redo = {$: 'Redo'};
-var $yotamDvir$elm_pivot$Pivot$Get$hasR = function (_v0) {
-	var _v1 = _v0.b;
-	var r = _v1.b;
-	return !$elm$core$List$isEmpty(r);
-};
-var $yotamDvir$elm_pivot$Pivot$hasR = $yotamDvir$elm_pivot$Pivot$Get$hasR;
-var $author$project$Main$redo = function (p) {
-	return $yotamDvir$elm_pivot$Pivot$hasR(p) ? A2(
-		$mdgriffith$elm_ui$Element$el,
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$Events$onClick($author$project$Main$Redo)
-			]),
-		$mdgriffith$elm_ui$Element$text('Redo')) : $mdgriffith$elm_ui$Element$text('Can\'t redo.');
-};
-var $author$project$Main$DeleteToolFilter = function (a) {
-	return {$: 'DeleteToolFilter', a: a};
-};
-var $author$project$Main$MoveToolFilter = function (a) {
-	return {$: 'MoveToolFilter', a: a};
-};
-var $author$project$Main$backgroundFocus = function (isFocused) {
-	return isFocused ? $mdgriffith$elm_ui$Element$Background$color(
-		A3($mdgriffith$elm_ui$Element$rgb255, 200, 200, 200)) : $mdgriffith$elm_ui$Element$Background$color(
-		A3($mdgriffith$elm_ui$Element$rgb255, 255, 255, 255));
-};
-var $author$project$Main$toolConfigOption = F4(
-	function (currentValue, msg, buttonValue, caption) {
-		return A2(
-			$mdgriffith$elm_ui$Element$el,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$Events$onClick(
-					msg(buttonValue)),
-					$author$project$Main$backgroundFocus(
-					_Utils_eq(currentValue, buttonValue)),
-					$mdgriffith$elm_ui$Element$padding(5)
-				]),
-			$mdgriffith$elm_ui$Element$text(caption));
-	});
-var $author$project$Main$colorConfig = F2(
-	function (currentColor, msg) {
-		return A2(
-			$mdgriffith$elm_ui$Element$row,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
-				]),
-			_List_fromArray(
-				[
-					A4($author$project$Main$toolConfigOption, currentColor, msg, $elm$core$Maybe$Nothing, 'all pieces'),
-					A4(
-					$author$project$Main$toolConfigOption,
-					currentColor,
-					msg,
-					$elm$core$Maybe$Just($author$project$Sako$White),
-					'white pieces'),
-					A4(
-					$author$project$Main$toolConfigOption,
-					currentColor,
-					msg,
-					$elm$core$Maybe$Just($author$project$Sako$Black),
-					'black pieces')
-				]));
-	});
-var $author$project$Main$CreateToolColor = function (a) {
-	return {$: 'CreateToolColor', a: a};
-};
-var $author$project$Main$CreateToolType = function (a) {
-	return {$: 'CreateToolType', a: a};
-};
-var $author$project$Main$createToolConfig = function (model) {
-	return A2(
-		$mdgriffith$elm_ui$Element$column,
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
-			]),
-		_List_fromArray(
-			[
-				A2(
-				$mdgriffith$elm_ui$Element$row,
-				_List_Nil,
-				_List_fromArray(
-					[
-						A4($author$project$Main$toolConfigOption, model.createToolColor, $author$project$Main$CreateToolColor, $author$project$Sako$White, 'White'),
-						A4($author$project$Main$toolConfigOption, model.createToolColor, $author$project$Main$CreateToolColor, $author$project$Sako$Black, 'Black')
-					])),
-				A2(
-				$mdgriffith$elm_ui$Element$wrappedRow,
-				_List_Nil,
-				_List_fromArray(
-					[
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Pawn, 'Pawn'),
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Rock, 'Rock'),
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Knight, 'Knight'),
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Bishop, 'Bishop'),
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Queen, 'Queen'),
-						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$King, 'King')
-					]))
-			]));
-};
-var $author$project$Main$CreateTool = {$: 'CreateTool'};
-var $author$project$Main$ToolSelect = function (a) {
-	return {$: 'ToolSelect', a: a};
-};
-var $lattyware$elm_fontawesome$FontAwesome$Icon$Icon = F5(
-	function (prefix, name, width, height, path) {
-		return {height: height, name: name, path: path, prefix: prefix, width: width};
-	});
-var $lattyware$elm_fontawesome$FontAwesome$Solid$chess = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'chess', 512, 512, 'M74 208H64a16 16 0 0 0-16 16v16a16 16 0 0 0 16 16h15.94A535.78 535.78 0 0 1 64 384h128a535.78 535.78 0 0 1-15.94-128H192a16 16 0 0 0 16-16v-16a16 16 0 0 0-16-16h-10l33.89-90.38a16 16 0 0 0-15-21.62H144V64h24a8 8 0 0 0 8-8V40a8 8 0 0 0-8-8h-24V8a8 8 0 0 0-8-8h-16a8 8 0 0 0-8 8v24H88a8 8 0 0 0-8 8v16a8 8 0 0 0 8 8h24v32H55.09a16 16 0 0 0-15 21.62zm173.16 251.58L224 448v-16a16 16 0 0 0-16-16H48a16 16 0 0 0-16 16v16L8.85 459.58A16 16 0 0 0 0 473.89V496a16 16 0 0 0 16 16h224a16 16 0 0 0 16-16v-22.11a16 16 0 0 0-8.84-14.31zm92.77-157.78l-3.29 82.2h126.72l-3.29-82.21 24.6-20.79A32 32 0 0 0 496 256.54V198a6 6 0 0 0-6-6h-26.38a6 6 0 0 0-6 6v26h-24.71v-26a6 6 0 0 0-6-6H373.1a6 6 0 0 0-6 6v26h-24.71v-26a6 6 0 0 0-6-6H310a6 6 0 0 0-6 6v58.6a32 32 0 0 0 11.36 24.4zM384 304a16 16 0 0 1 32 0v32h-32zm119.16 155.58L480 448v-16a16 16 0 0 0-16-16H336a16 16 0 0 0-16 16v16l-23.15 11.58a16 16 0 0 0-8.85 14.31V496a16 16 0 0 0 16 16h192a16 16 0 0 0 16-16v-22.11a16 16 0 0 0-8.84-14.31z');
-var $mdgriffith$elm_ui$Element$fillPortion = $mdgriffith$elm_ui$Internal$Model$Fill;
 var $lattyware$elm_fontawesome$FontAwesome$Icon$Presentation = function (a) {
 	return {$: 'Presentation', a: a};
 };
@@ -19474,6 +18929,779 @@ var $author$project$Main$icon = F2(
 			$mdgriffith$elm_ui$Element$html(
 				$lattyware$elm_fontawesome$FontAwesome$Icon$viewIcon(iconType)));
 	});
+var $lattyware$elm_fontawesome$FontAwesome$Solid$yinYang = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'yin-yang', 496, 512, 'M248 8C111.03 8 0 119.03 0 256s111.03 248 248 248 248-111.03 248-248S384.97 8 248 8zm0 376c-17.67 0-32-14.33-32-32s14.33-32 32-32 32 14.33 32 32-14.33 32-32 32zm0-128c-53.02 0-96 42.98-96 96s42.98 96 96 96c-106.04 0-192-85.96-192-192S141.96 64 248 64c53.02 0 96 42.98 96 96s-42.98 96-96 96zm0-128c-17.67 0-32 14.33-32 32s14.33 32 32 32 32-14.33 32-32-14.33-32-32-32z');
+var $author$project$Main$colorPicker = F3(
+	function (msg, currentColor, newColor) {
+		var iconChoice = _Utils_eq(currentColor, newColor) ? $lattyware$elm_fontawesome$FontAwesome$Solid$yinYang : $lattyware$elm_fontawesome$FontAwesome$Regular$circle;
+		return A2(
+			$mdgriffith$elm_ui$Element$el,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
+					$mdgriffith$elm_ui$Element$Events$onClick(
+					msg(newColor)),
+					$mdgriffith$elm_ui$Element$padding(5),
+					$mdgriffith$elm_ui$Element$Background$color(
+					$author$project$Pieces$colorUi(newColor.stroke))
+				]),
+			A2(
+				$author$project$Main$icon,
+				_List_fromArray(
+					[
+						$mdgriffith$elm_ui$Element$centerX,
+						$mdgriffith$elm_ui$Element$Font$color(
+						$author$project$Pieces$colorUi(newColor.fill))
+					]),
+				iconChoice));
+	});
+var $author$project$Pieces$greenPieceColor = {
+	fill: _Utils_Tuple3(50, 255, 50),
+	stroke: _Utils_Tuple3(50, 150, 50)
+};
+var $author$project$Pieces$orangePieceColor = {
+	fill: _Utils_Tuple3(255, 150, 50),
+	stroke: _Utils_Tuple3(150, 100, 50)
+};
+var $author$project$Pieces$pinkPieceColor = {
+	fill: _Utils_Tuple3(255, 50, 255),
+	stroke: _Utils_Tuple3(150, 50, 150)
+};
+var $author$project$Pieces$purplePieceColor = {
+	fill: _Utils_Tuple3(150, 0, 255),
+	stroke: _Utils_Tuple3(140, 0, 150)
+};
+var $author$project$Pieces$redPieceColor = {
+	fill: _Utils_Tuple3(255, 50, 50),
+	stroke: _Utils_Tuple3(150, 50, 50)
+};
+var $mdgriffith$elm_ui$Internal$Model$Padding = F5(
+	function (a, b, c, d, e) {
+		return {$: 'Padding', a: a, b: b, c: c, d: d, e: e};
+	});
+var $mdgriffith$elm_ui$Internal$Model$Spaced = F3(
+	function (a, b, c) {
+		return {$: 'Spaced', a: a, b: b, c: c};
+	});
+var $mdgriffith$elm_ui$Internal$Model$extractSpacingAndPadding = function (attrs) {
+	return A3(
+		$elm$core$List$foldr,
+		F2(
+			function (attr, _v0) {
+				var pad = _v0.a;
+				var spacing = _v0.b;
+				return _Utils_Tuple2(
+					function () {
+						if (pad.$ === 'Just') {
+							var x = pad.a;
+							return pad;
+						} else {
+							if ((attr.$ === 'StyleClass') && (attr.b.$ === 'PaddingStyle')) {
+								var _v3 = attr.b;
+								var name = _v3.a;
+								var t = _v3.b;
+								var r = _v3.c;
+								var b = _v3.d;
+								var l = _v3.e;
+								return $elm$core$Maybe$Just(
+									A5($mdgriffith$elm_ui$Internal$Model$Padding, name, t, r, b, l));
+							} else {
+								return $elm$core$Maybe$Nothing;
+							}
+						}
+					}(),
+					function () {
+						if (spacing.$ === 'Just') {
+							var x = spacing.a;
+							return spacing;
+						} else {
+							if ((attr.$ === 'StyleClass') && (attr.b.$ === 'SpacingStyle')) {
+								var _v6 = attr.b;
+								var name = _v6.a;
+								var x = _v6.b;
+								var y = _v6.c;
+								return $elm$core$Maybe$Just(
+									A3($mdgriffith$elm_ui$Internal$Model$Spaced, name, x, y));
+							} else {
+								return $elm$core$Maybe$Nothing;
+							}
+						}
+					}());
+			}),
+		_Utils_Tuple2($elm$core$Maybe$Nothing, $elm$core$Maybe$Nothing),
+		attrs);
+};
+var $mdgriffith$elm_ui$Element$wrappedRow = F2(
+	function (attrs, children) {
+		var _v0 = $mdgriffith$elm_ui$Internal$Model$extractSpacingAndPadding(attrs);
+		var padded = _v0.a;
+		var spaced = _v0.b;
+		if (spaced.$ === 'Nothing') {
+			return A4(
+				$mdgriffith$elm_ui$Internal$Model$element,
+				$mdgriffith$elm_ui$Internal$Model$asRow,
+				$mdgriffith$elm_ui$Internal$Model$div,
+				A2(
+					$elm$core$List$cons,
+					$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
+					A2(
+						$elm$core$List$cons,
+						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
+						A2(
+							$elm$core$List$cons,
+							$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
+							attrs))),
+				$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
+		} else {
+			var _v2 = spaced.a;
+			var spaceName = _v2.a;
+			var x = _v2.b;
+			var y = _v2.c;
+			var newPadding = function () {
+				if (padded.$ === 'Just') {
+					var _v5 = padded.a;
+					var name = _v5.a;
+					var t = _v5.b;
+					var r = _v5.c;
+					var b = _v5.d;
+					var l = _v5.e;
+					return ((_Utils_cmp(r, (x / 2) | 0) > -1) && (_Utils_cmp(b, (y / 2) | 0) > -1)) ? $elm$core$Maybe$Just(
+						$mdgriffith$elm_ui$Element$paddingEach(
+							{bottom: b - ((y / 2) | 0), left: l - ((x / 2) | 0), right: r - ((x / 2) | 0), top: t - ((y / 2) | 0)})) : $elm$core$Maybe$Nothing;
+				} else {
+					return $elm$core$Maybe$Nothing;
+				}
+			}();
+			if (newPadding.$ === 'Just') {
+				var pad = newPadding.a;
+				return A4(
+					$mdgriffith$elm_ui$Internal$Model$element,
+					$mdgriffith$elm_ui$Internal$Model$asRow,
+					$mdgriffith$elm_ui$Internal$Model$div,
+					A2(
+						$elm$core$List$cons,
+						$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
+						A2(
+							$elm$core$List$cons,
+							$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
+							A2(
+								$elm$core$List$cons,
+								$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
+								_Utils_ap(
+									attrs,
+									_List_fromArray(
+										[pad]))))),
+					$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
+			} else {
+				var halfY = -(y / 2);
+				var halfX = -(x / 2);
+				return A4(
+					$mdgriffith$elm_ui$Internal$Model$element,
+					$mdgriffith$elm_ui$Internal$Model$asEl,
+					$mdgriffith$elm_ui$Internal$Model$div,
+					attrs,
+					$mdgriffith$elm_ui$Internal$Model$Unkeyed(
+						_List_fromArray(
+							[
+								A4(
+								$mdgriffith$elm_ui$Internal$Model$element,
+								$mdgriffith$elm_ui$Internal$Model$asRow,
+								$mdgriffith$elm_ui$Internal$Model$div,
+								A2(
+									$elm$core$List$cons,
+									$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentLeft + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.wrapped)))),
+									A2(
+										$elm$core$List$cons,
+										$mdgriffith$elm_ui$Internal$Model$Attr(
+											A2(
+												$elm$html$Html$Attributes$style,
+												'margin',
+												$elm$core$String$fromFloat(halfY) + ('px' + (' ' + ($elm$core$String$fromFloat(halfX) + 'px'))))),
+										A2(
+											$elm$core$List$cons,
+											$mdgriffith$elm_ui$Internal$Model$Attr(
+												A2(
+													$elm$html$Html$Attributes$style,
+													'width',
+													'calc(100% + ' + ($elm$core$String$fromInt(x) + 'px)'))),
+											A2(
+												$elm$core$List$cons,
+												$mdgriffith$elm_ui$Internal$Model$Attr(
+													A2(
+														$elm$html$Html$Attributes$style,
+														'height',
+														'calc(100% + ' + ($elm$core$String$fromInt(y) + 'px)'))),
+												A2(
+													$elm$core$List$cons,
+													A2(
+														$mdgriffith$elm_ui$Internal$Model$StyleClass,
+														$mdgriffith$elm_ui$Internal$Flag$spacing,
+														A3($mdgriffith$elm_ui$Internal$Model$SpacingStyle, spaceName, x, y)),
+													_List_Nil))))),
+								$mdgriffith$elm_ui$Internal$Model$Unkeyed(children))
+							])));
+			}
+		}
+	});
+var $author$project$Pieces$yellowPieceColor = {
+	fill: _Utils_Tuple3(255, 255, 50),
+	stroke: _Utils_Tuple3(150, 150, 50)
+};
+var $author$project$Main$colorSchemeConfigBlack = function (taco) {
+	return A2(
+		$mdgriffith$elm_ui$Element$wrappedRow,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$whitePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$redPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$orangePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$yellowPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$greenPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$bluePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$purplePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$pinkPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$BlackSideColor, taco.colorScheme.black, $author$project$Pieces$blackPieceColor)
+			]));
+};
+var $author$project$Main$WhiteSideColor = function (a) {
+	return {$: 'WhiteSideColor', a: a};
+};
+var $author$project$Main$colorSchemeConfigWhite = function (taco) {
+	return A2(
+		$mdgriffith$elm_ui$Element$row,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$whitePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$redPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$orangePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$yellowPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$greenPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$bluePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$purplePieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$pinkPieceColor),
+				A3($author$project$Main$colorPicker, $author$project$Main$WhiteSideColor, taco.colorScheme.white, $author$project$Pieces$blackPieceColor)
+			]));
+};
+var $author$project$Main$colorSchemeConfig = function (taco) {
+	return A2(
+		$mdgriffith$elm_ui$Element$column,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
+				$mdgriffith$elm_ui$Element$spacing(5)
+			]),
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$text('Piece colors'),
+				$author$project$Main$colorSchemeConfigWhite(taco),
+				$author$project$Main$colorSchemeConfigBlack(taco)
+			]));
+};
+var $author$project$Main$UpdateUserPaste = function (a) {
+	return {$: 'UpdateUserPaste', a: a};
+};
+var $author$project$Main$tileFlat = function (_v0) {
+	var x = _v0.a;
+	var y = _v0.b;
+	return x + (8 * y);
+};
+var $author$project$Main$pacoPositionAsGrid = function (pieces) {
+	var colorTiles = function (filterColor) {
+		return $elm$core$Dict$fromList(
+			A2(
+				$elm$core$List$map,
+				function (piece) {
+					return _Utils_Tuple2(
+						$author$project$Main$tileFlat(piece.position),
+						piece.pieceType);
+				},
+				A2(
+					$elm$core$List$filter,
+					function (piece) {
+						return _Utils_eq(piece.color, filterColor);
+					},
+					pieces)));
+	};
+	return A6(
+		$elm$core$Dict$merge,
+		F3(
+			function (i, w, dict) {
+				return A3(
+					$elm$core$Dict$insert,
+					i,
+					$author$project$Main$WhiteTile(w),
+					dict);
+			}),
+		F4(
+			function (i, w, b, dict) {
+				return A3(
+					$elm$core$Dict$insert,
+					i,
+					A2($author$project$Main$PairTile, w, b),
+					dict);
+			}),
+		F3(
+			function (i, b, dict) {
+				return A3(
+					$elm$core$Dict$insert,
+					i,
+					$author$project$Main$BlackTile(b),
+					dict);
+			}),
+		colorTiles($author$project$Sako$White),
+		colorTiles($author$project$Sako$Black),
+		$elm$core$Dict$empty);
+};
+var $author$project$Main$markdownTypeChar = function (pieceType) {
+	switch (pieceType.$) {
+		case 'Pawn':
+			return 'P';
+		case 'Rock':
+			return 'R';
+		case 'Knight':
+			return 'N';
+		case 'Bishop':
+			return 'B';
+		case 'Queen':
+			return 'Q';
+		default:
+			return 'K';
+	}
+};
+var $author$project$Main$tileStateAsString = function (tileState) {
+	switch (tileState.$) {
+		case 'EmptyTile':
+			return '..';
+		case 'WhiteTile':
+			var w = tileState.a;
+			return $author$project$Main$markdownTypeChar(w) + '.';
+		case 'BlackTile':
+			var b = tileState.a;
+			return '.' + $author$project$Main$markdownTypeChar(b);
+		default:
+			var w = tileState.a;
+			var b = tileState.b;
+			return _Utils_ap(
+				$author$project$Main$markdownTypeChar(w),
+				$author$project$Main$markdownTypeChar(b));
+	}
+};
+var $author$project$Main$markdownExchangeNotation = function (pieces) {
+	var indices = _List_fromArray(
+		[
+			_List_fromArray(
+			[56, 57, 58, 59, 60, 61, 62, 63]),
+			_List_fromArray(
+			[48, 49, 50, 51, 52, 53, 54, 55]),
+			_List_fromArray(
+			[40, 41, 42, 43, 44, 45, 46, 47]),
+			_List_fromArray(
+			[32, 33, 34, 35, 36, 37, 38, 39]),
+			_List_fromArray(
+			[24, 25, 26, 27, 28, 29, 30, 31]),
+			_List_fromArray(
+			[16, 17, 18, 19, 20, 21, 22, 23]),
+			_List_fromArray(
+			[8, 9, 10, 11, 12, 13, 14, 15]),
+			_List_fromArray(
+			[0, 1, 2, 3, 4, 5, 6, 7])
+		]);
+	var dictRepresentation = $author$project$Main$pacoPositionAsGrid(pieces);
+	var tileEntry = function (i) {
+		return $author$project$Main$tileStateAsString(
+			A2(
+				$elm$core$Maybe$withDefault,
+				$author$project$Main$EmptyTile,
+				A2($elm$core$Dict$get, i, dictRepresentation)));
+	};
+	var markdownRow = function (indexRow) {
+		return A2(
+			$elm$core$String$join,
+			' ',
+			A2($elm$core$List$map, tileEntry, indexRow));
+	};
+	return A2(
+		$elm$core$String$join,
+		'\n',
+		A2($elm$core$List$map, markdownRow, indices));
+};
+var $mdgriffith$elm_ui$Internal$Model$Monospace = {$: 'Monospace'};
+var $mdgriffith$elm_ui$Element$Font$monospace = $mdgriffith$elm_ui$Internal$Model$Monospace;
+var $author$project$Main$UseUserPaste = function (a) {
+	return {$: 'UseUserPaste', a: a};
+};
+var $author$project$Main$parsedMarkdownPaste = F2(
+	function (taco, model) {
+		var _v0 = model.pasteParsed;
+		switch (_v0.$) {
+			case 'NoInput':
+				return $mdgriffith$elm_ui$Element$none;
+			case 'ParseError':
+				var error = _v0.a;
+				return $mdgriffith$elm_ui$Element$text(error);
+			default:
+				var pacoPosition = _v0.a;
+				return A2(
+					$mdgriffith$elm_ui$Element$row,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$Events$onClick(
+							$author$project$Main$UseUserPaste(pacoPosition)),
+							$mdgriffith$elm_ui$Element$spacing(5)
+						]),
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$html(
+							$author$project$Main$positionSvg(
+								{colorScheme: taco.colorScheme, drag: $author$project$Main$DragOff, nodeId: $elm$core$Maybe$Nothing, position: pacoPosition, sideLength: 100, viewMode: $author$project$Main$CleanBoard})),
+							$mdgriffith$elm_ui$Element$text('Load')
+						]));
+		}
+	});
+var $mdgriffith$elm_ui$Element$Input$Placeholder = F2(
+	function (a, b) {
+		return {$: 'Placeholder', a: a, b: b};
+	});
+var $mdgriffith$elm_ui$Element$Input$placeholder = $mdgriffith$elm_ui$Element$Input$Placeholder;
+var $author$project$Main$markdownCopyPaste = F2(
+	function (taco, model) {
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(5)
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text('Text notation you can store'),
+					A2(
+					$mdgriffith$elm_ui$Element$Input$multiline,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$Font$family(
+							_List_fromArray(
+								[$mdgriffith$elm_ui$Element$Font$monospace]))
+						]),
+					{
+						label: $mdgriffith$elm_ui$Element$Input$labelHidden('Copy this to a text document for later use.'),
+						onChange: function (_v0) {
+							return $author$project$Main$NoOp;
+						},
+						placeholder: $elm$core$Maybe$Nothing,
+						spellcheck: false,
+						text: $author$project$Main$markdownExchangeNotation(
+							$yotamDvir$elm_pivot$Pivot$getC(model.game).pieces)
+					}),
+					$mdgriffith$elm_ui$Element$text('Recover state from notation'),
+					A2(
+					$mdgriffith$elm_ui$Element$Input$multiline,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$Font$family(
+							_List_fromArray(
+								[$mdgriffith$elm_ui$Element$Font$monospace]))
+						]),
+					{
+						label: $mdgriffith$elm_ui$Element$Input$labelHidden('Paste level notation as you see above.'),
+						onChange: $author$project$Main$UpdateUserPaste,
+						placeholder: $elm$core$Maybe$Just(
+							A2(
+								$mdgriffith$elm_ui$Element$Input$placeholder,
+								_List_Nil,
+								$mdgriffith$elm_ui$Element$text('Paste level notation.'))),
+						spellcheck: false,
+						text: model.userPaste
+					}),
+					A2($author$project$Main$parsedMarkdownPaste, taco, model)
+				]));
+	});
+var $author$project$Main$Redo = {$: 'Redo'};
+var $lattyware$elm_fontawesome$FontAwesome$Solid$arrowRight = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'arrow-right', 448, 512, 'M190.5 66.9l22.2-22.2c9.4-9.4 24.6-9.4 33.9 0L441 239c9.4 9.4 9.4 24.6 0 33.9L246.6 467.3c-9.4 9.4-24.6 9.4-33.9 0l-22.2-22.2c-9.5-9.5-9.3-25 .4-34.3L311.4 296H24c-13.3 0-24-10.7-24-24v-32c0-13.3 10.7-24 24-24h287.4L190.9 101.2c-9.8-9.3-10-24.8-.4-34.3z');
+var $mdgriffith$elm_ui$Internal$Model$Button = {$: 'Button'};
+var $elm$html$Html$Attributes$disabled = $elm$html$Html$Attributes$boolProperty('disabled');
+var $mdgriffith$elm_ui$Element$Input$hasFocusStyle = function (attr) {
+	if (((attr.$ === 'StyleClass') && (attr.b.$ === 'PseudoSelector')) && (attr.b.a.$ === 'Focus')) {
+		var _v1 = attr.b;
+		var _v2 = _v1.a;
+		return true;
+	} else {
+		return false;
+	}
+};
+var $mdgriffith$elm_ui$Element$Input$focusDefault = function (attrs) {
+	return A2($elm$core$List$any, $mdgriffith$elm_ui$Element$Input$hasFocusStyle, attrs) ? $mdgriffith$elm_ui$Internal$Model$NoAttribute : $mdgriffith$elm_ui$Internal$Model$htmlClass('focusable');
+};
+var $mdgriffith$elm_ui$Element$Input$enter = 'Enter';
+var $elm$json$Json$Decode$andThen = _Json_andThen;
+var $elm$json$Json$Decode$fail = _Json_fail;
+var $elm$virtual_dom$VirtualDom$MayPreventDefault = function (a) {
+	return {$: 'MayPreventDefault', a: a};
+};
+var $elm$html$Html$Events$preventDefaultOn = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$MayPreventDefault(decoder));
+	});
+var $mdgriffith$elm_ui$Element$Input$onKey = F2(
+	function (desiredCode, msg) {
+		var decode = function (code) {
+			return _Utils_eq(code, desiredCode) ? $elm$json$Json$Decode$succeed(msg) : $elm$json$Json$Decode$fail('Not the enter key');
+		};
+		var isKey = A2(
+			$elm$json$Json$Decode$andThen,
+			decode,
+			A2($elm$json$Json$Decode$field, 'key', $elm$json$Json$Decode$string));
+		return $mdgriffith$elm_ui$Internal$Model$Attr(
+			A2(
+				$elm$html$Html$Events$preventDefaultOn,
+				'keyup',
+				A2(
+					$elm$json$Json$Decode$map,
+					function (fired) {
+						return _Utils_Tuple2(fired, true);
+					},
+					isKey)));
+	});
+var $mdgriffith$elm_ui$Element$Input$onEnter = function (msg) {
+	return A2($mdgriffith$elm_ui$Element$Input$onKey, $mdgriffith$elm_ui$Element$Input$enter, msg);
+};
+var $mdgriffith$elm_ui$Element$pointer = A2($mdgriffith$elm_ui$Internal$Model$Class, $mdgriffith$elm_ui$Internal$Flag$cursor, $mdgriffith$elm_ui$Internal$Style$classes.cursorPointer);
+var $elm$html$Html$Attributes$tabindex = function (n) {
+	return A2(
+		_VirtualDom_attribute,
+		'tabIndex',
+		$elm$core$String$fromInt(n));
+};
+var $mdgriffith$elm_ui$Element$Input$button = F2(
+	function (attrs, _v0) {
+		var onPress = _v0.onPress;
+		var label = _v0.label;
+		return A4(
+			$mdgriffith$elm_ui$Internal$Model$element,
+			$mdgriffith$elm_ui$Internal$Model$asEl,
+			$mdgriffith$elm_ui$Internal$Model$div,
+			A2(
+				$elm$core$List$cons,
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
+				A2(
+					$elm$core$List$cons,
+					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
+					A2(
+						$elm$core$List$cons,
+						$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentCenterX + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.seButton + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.noTextSelection)))))),
+						A2(
+							$elm$core$List$cons,
+							$mdgriffith$elm_ui$Element$pointer,
+							A2(
+								$elm$core$List$cons,
+								$mdgriffith$elm_ui$Element$Input$focusDefault(attrs),
+								A2(
+									$elm$core$List$cons,
+									$mdgriffith$elm_ui$Internal$Model$Describe($mdgriffith$elm_ui$Internal$Model$Button),
+									A2(
+										$elm$core$List$cons,
+										$mdgriffith$elm_ui$Internal$Model$Attr(
+											$elm$html$Html$Attributes$tabindex(0)),
+										function () {
+											if (onPress.$ === 'Nothing') {
+												return A2(
+													$elm$core$List$cons,
+													$mdgriffith$elm_ui$Internal$Model$Attr(
+														$elm$html$Html$Attributes$disabled(true)),
+													attrs);
+											} else {
+												var msg = onPress.a;
+												return A2(
+													$elm$core$List$cons,
+													$mdgriffith$elm_ui$Element$Events$onClick(msg),
+													A2(
+														$elm$core$List$cons,
+														$mdgriffith$elm_ui$Element$Input$onEnter(msg),
+														attrs));
+											}
+										}()))))))),
+			$mdgriffith$elm_ui$Internal$Model$Unkeyed(
+				_List_fromArray(
+					[label])));
+	});
+var $author$project$Main$flatButton = F2(
+	function (onPress, content) {
+		return A2(
+			$mdgriffith$elm_ui$Element$Input$button,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$padding(10)
+				]),
+			{label: content, onPress: onPress});
+	});
+var $yotamDvir$elm_pivot$Pivot$Get$hasR = function (_v0) {
+	var _v1 = _v0.b;
+	var r = _v1.b;
+	return !$elm$core$List$isEmpty(r);
+};
+var $yotamDvir$elm_pivot$Pivot$hasR = $yotamDvir$elm_pivot$Pivot$Get$hasR;
+var $author$project$Main$redo = function (p) {
+	return $yotamDvir$elm_pivot$Pivot$hasR(p) ? A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Just($author$project$Main$Redo),
+		A2($author$project$Main$icon, _List_Nil, $lattyware$elm_fontawesome$FontAwesome$Solid$arrowRight)) : A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Nothing,
+		A2(
+			$author$project$Main$icon,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$Font$color(
+					A3($mdgriffith$elm_ui$Element$rgb255, 150, 150, 150))
+				]),
+			$lattyware$elm_fontawesome$FontAwesome$Solid$arrowRight));
+};
+var $lattyware$elm_fontawesome$FontAwesome$Solid$broom = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'broom', 640, 512, 'M256.47 216.77l86.73 109.18s-16.6 102.36-76.57 150.12C206.66 523.85 0 510.19 0 510.19s3.8-23.14 11-55.43l94.62-112.17c3.97-4.7-.87-11.62-6.65-9.5l-60.4 22.09c14.44-41.66 32.72-80.04 54.6-97.47 59.97-47.76 163.3-40.94 163.3-40.94zM636.53 31.03l-19.86-25c-5.49-6.9-15.52-8.05-22.41-2.56l-232.48 177.8-34.14-42.97c-5.09-6.41-15.14-5.21-18.59 2.21l-25.33 54.55 86.73 109.18 58.8-12.45c8-1.69 11.42-11.2 6.34-17.6l-34.09-42.92 232.48-177.8c6.89-5.48 8.04-15.53 2.55-22.44z');
+var $author$project$Main$emptyPosition = {moveNumber: 0, pieces: _List_Nil};
+var $author$project$Main$resetClearBoard = function (p) {
+	return (!_Utils_eq(
+		$yotamDvir$elm_pivot$Pivot$getC(p),
+		$author$project$Main$emptyPosition)) ? A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Just(
+			$author$project$Main$Reset($author$project$Main$emptyPosition)),
+		A2($author$project$Main$icon, _List_Nil, $lattyware$elm_fontawesome$FontAwesome$Solid$broom)) : A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Nothing,
+		A2(
+			$author$project$Main$icon,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$Font$color(
+					A3($mdgriffith$elm_ui$Element$rgb255, 150, 150, 150))
+				]),
+			$lattyware$elm_fontawesome$FontAwesome$Solid$broom));
+};
+var $lattyware$elm_fontawesome$FontAwesome$Solid$home = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'home', 576, 512, 'M280.37 148.26L96 300.11V464a16 16 0 0 0 16 16l112.06-.29a16 16 0 0 0 15.92-16V368a16 16 0 0 1 16-16h64a16 16 0 0 1 16 16v95.64a16 16 0 0 0 16 16.05L464 480a16 16 0 0 0 16-16V300L295.67 148.26a12.19 12.19 0 0 0-15.3 0zM571.6 251.47L488 182.56V44.05a12 12 0 0 0-12-12h-56a12 12 0 0 0-12 12v72.61L318.47 43a48 48 0 0 0-61 0L4.34 251.47a12 12 0 0 0-1.6 16.9l25.5 31A12 12 0 0 0 45.15 301l235.22-193.74a12.19 12.19 0 0 1 15.3 0L530.9 301a12 12 0 0 0 16.9-1.6l25.5-31a12 12 0 0 0-1.7-16.93z');
+var $author$project$Main$resetStartingBoard = function (p) {
+	return (!_Utils_eq(
+		$yotamDvir$elm_pivot$Pivot$getC(p),
+		$author$project$Main$initialPosition)) ? A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Just(
+			$author$project$Main$Reset($author$project$Main$initialPosition)),
+		A2($author$project$Main$icon, _List_Nil, $lattyware$elm_fontawesome$FontAwesome$Solid$home)) : A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Nothing,
+		A2(
+			$author$project$Main$icon,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$Font$color(
+					A3($mdgriffith$elm_ui$Element$rgb255, 150, 150, 150))
+				]),
+			$lattyware$elm_fontawesome$FontAwesome$Solid$home));
+};
+var $author$project$Main$Undo = {$: 'Undo'};
+var $lattyware$elm_fontawesome$FontAwesome$Solid$arrowLeft = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'arrow-left', 448, 512, 'M257.5 445.1l-22.2 22.2c-9.4 9.4-24.6 9.4-33.9 0L7 273c-9.4-9.4-9.4-24.6 0-33.9L201.4 44.7c9.4-9.4 24.6-9.4 33.9 0l22.2 22.2c9.5 9.5 9.3 25-.4 34.3L136.6 216H424c13.3 0 24 10.7 24 24v32c0 13.3-10.7 24-24 24H136.6l120.5 114.8c9.8 9.3 10 24.8.4 34.3z');
+var $yotamDvir$elm_pivot$Pivot$Get$hasL = function (_v0) {
+	var _v1 = _v0.b;
+	var l = _v1.a;
+	return !$elm$core$List$isEmpty(l);
+};
+var $yotamDvir$elm_pivot$Pivot$hasL = $yotamDvir$elm_pivot$Pivot$Get$hasL;
+var $author$project$Main$undo = function (p) {
+	return $yotamDvir$elm_pivot$Pivot$hasL(p) ? A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Just($author$project$Main$Undo),
+		A2($author$project$Main$icon, _List_Nil, $lattyware$elm_fontawesome$FontAwesome$Solid$arrowLeft)) : A2(
+		$author$project$Main$flatButton,
+		$elm$core$Maybe$Nothing,
+		A2(
+			$author$project$Main$icon,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$Font$color(
+					A3($mdgriffith$elm_ui$Element$rgb255, 150, 150, 150))
+				]),
+			$lattyware$elm_fontawesome$FontAwesome$Solid$arrowLeft));
+};
+var $author$project$Main$sidebarActionButtons = function (p) {
+	return A2(
+		$mdgriffith$elm_ui$Element$row,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				$author$project$Main$undo(p),
+				$author$project$Main$redo(p),
+				$author$project$Main$resetStartingBoard(p),
+				$author$project$Main$resetClearBoard(p)
+			]));
+};
+var $author$project$Main$CreateTool = {$: 'CreateTool'};
+var $author$project$Main$DeleteTool = {$: 'DeleteTool'};
+var $author$project$Main$DeleteToolFilter = function (a) {
+	return {$: 'DeleteToolFilter', a: a};
+};
+var $author$project$Main$MoveToolFilter = function (a) {
+	return {$: 'MoveToolFilter', a: a};
+};
+var $author$project$Main$backgroundFocus = function (isFocused) {
+	return isFocused ? $mdgriffith$elm_ui$Element$Background$color(
+		A3($mdgriffith$elm_ui$Element$rgb255, 200, 200, 200)) : $mdgriffith$elm_ui$Element$Background$color(
+		A3($mdgriffith$elm_ui$Element$rgb255, 255, 255, 255));
+};
+var $author$project$Main$toolConfigOption = F4(
+	function (currentValue, msg, buttonValue, caption) {
+		return A2(
+			$mdgriffith$elm_ui$Element$el,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$Events$onClick(
+					msg(buttonValue)),
+					$author$project$Main$backgroundFocus(
+					_Utils_eq(currentValue, buttonValue)),
+					$mdgriffith$elm_ui$Element$padding(5)
+				]),
+			$mdgriffith$elm_ui$Element$text(caption));
+	});
+var $author$project$Main$colorConfig = F2(
+	function (currentColor, msg) {
+		return A2(
+			$mdgriffith$elm_ui$Element$row,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+				]),
+			_List_fromArray(
+				[
+					A4($author$project$Main$toolConfigOption, currentColor, msg, $elm$core$Maybe$Nothing, 'all pieces'),
+					A4(
+					$author$project$Main$toolConfigOption,
+					currentColor,
+					msg,
+					$elm$core$Maybe$Just($author$project$Sako$White),
+					'white pieces'),
+					A4(
+					$author$project$Main$toolConfigOption,
+					currentColor,
+					msg,
+					$elm$core$Maybe$Just($author$project$Sako$Black),
+					'black pieces')
+				]));
+	});
+var $author$project$Main$ToolSelect = function (a) {
+	return {$: 'ToolSelect', a: a};
+};
+var $lattyware$elm_fontawesome$FontAwesome$Solid$chess = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'chess', 512, 512, 'M74 208H64a16 16 0 0 0-16 16v16a16 16 0 0 0 16 16h15.94A535.78 535.78 0 0 1 64 384h128a535.78 535.78 0 0 1-15.94-128H192a16 16 0 0 0 16-16v-16a16 16 0 0 0-16-16h-10l33.89-90.38a16 16 0 0 0-15-21.62H144V64h24a8 8 0 0 0 8-8V40a8 8 0 0 0-8-8h-24V8a8 8 0 0 0-8-8h-16a8 8 0 0 0-8 8v24H88a8 8 0 0 0-8 8v16a8 8 0 0 0 8 8h24v32H55.09a16 16 0 0 0-15 21.62zm173.16 251.58L224 448v-16a16 16 0 0 0-16-16H48a16 16 0 0 0-16 16v16L8.85 459.58A16 16 0 0 0 0 473.89V496a16 16 0 0 0 16 16h224a16 16 0 0 0 16-16v-22.11a16 16 0 0 0-8.84-14.31zm92.77-157.78l-3.29 82.2h126.72l-3.29-82.21 24.6-20.79A32 32 0 0 0 496 256.54V198a6 6 0 0 0-6-6h-26.38a6 6 0 0 0-6 6v26h-24.71v-26a6 6 0 0 0-6-6H373.1a6 6 0 0 0-6 6v26h-24.71v-26a6 6 0 0 0-6-6H310a6 6 0 0 0-6 6v58.6a32 32 0 0 0 11.36 24.4zM384 304a16 16 0 0 1 32 0v32h-32zm119.16 155.58L480 448v-16a16 16 0 0 0-16-16H336a16 16 0 0 0-16 16v16l-23.15 11.58a16 16 0 0 0-8.85 14.31V496a16 16 0 0 0 16 16h192a16 16 0 0 0 16-16v-22.11a16 16 0 0 0-8.84-14.31z');
+var $mdgriffith$elm_ui$Element$fillPortion = $mdgriffith$elm_ui$Internal$Model$Fill;
 var $author$project$Main$createToolButton = function (tool) {
 	return A2(
 		$mdgriffith$elm_ui$Element$row,
@@ -19497,7 +19725,43 @@ var $author$project$Main$createToolButton = function (tool) {
 				$mdgriffith$elm_ui$Element$text('Add Piece')
 			]));
 };
-var $author$project$Main$DeleteTool = {$: 'DeleteTool'};
+var $author$project$Main$CreateToolColor = function (a) {
+	return {$: 'CreateToolColor', a: a};
+};
+var $author$project$Main$CreateToolType = function (a) {
+	return {$: 'CreateToolType', a: a};
+};
+var $author$project$Main$createToolConfig = function (model) {
+	return A2(
+		$mdgriffith$elm_ui$Element$column,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$mdgriffith$elm_ui$Element$row,
+				_List_Nil,
+				_List_fromArray(
+					[
+						A4($author$project$Main$toolConfigOption, model.createToolColor, $author$project$Main$CreateToolColor, $author$project$Sako$White, 'White'),
+						A4($author$project$Main$toolConfigOption, model.createToolColor, $author$project$Main$CreateToolColor, $author$project$Sako$Black, 'Black')
+					])),
+				A2(
+				$mdgriffith$elm_ui$Element$wrappedRow,
+				_List_Nil,
+				_List_fromArray(
+					[
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Pawn, 'Pawn'),
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Rock, 'Rock'),
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Knight, 'Knight'),
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Bishop, 'Bishop'),
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$Queen, 'Queen'),
+						A4($author$project$Main$toolConfigOption, model.createToolType, $author$project$Main$CreateToolType, $author$project$Sako$King, 'King')
+					]))
+			]));
+};
 var $lattyware$elm_fontawesome$FontAwesome$Solid$trash = A5($lattyware$elm_fontawesome$FontAwesome$Icon$Icon, 'fas', 'trash', 448, 512, 'M432 32H312l-9.4-18.7A24 24 0 0 0 281.1 0H166.8a23.72 23.72 0 0 0-21.4 13.3L136 32H16A16 16 0 0 0 0 48v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16zM53.2 467a48 48 0 0 0 47.9 45h245.8a48 48 0 0 0 47.9-45L416 128H32z');
 var $author$project$Main$deleteToolButton = function (tool) {
 	return A2(
@@ -19546,32 +19810,7 @@ var $author$project$Main$moveToolButton = function (tool) {
 				$mdgriffith$elm_ui$Element$text('Move Piece')
 			]));
 };
-var $author$project$Main$toolHeader = function (tool) {
-	return A2(
-		$mdgriffith$elm_ui$Element$wrappedRow,
-		_List_fromArray(
-			[
-				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
-			]),
-		_List_fromArray(
-			[
-				$author$project$Main$moveToolButton(tool),
-				$author$project$Main$deleteToolButton(tool),
-				$author$project$Main$createToolButton(tool)
-			]));
-};
-var $author$project$Main$toolConfig = function (model) {
-	var toolBody = function () {
-		var _v0 = model.tool;
-		switch (_v0.$) {
-			case 'MoveTool':
-				return A2($author$project$Main$colorConfig, model.moveToolColor, $author$project$Main$MoveToolFilter);
-			case 'DeleteTool':
-				return A2($author$project$Main$colorConfig, model.deleteToolColor, $author$project$Main$DeleteToolFilter);
-			default:
-				return $author$project$Main$createToolConfig(model);
-		}
-	}();
+var $author$project$Main$toolConfig = function (editor) {
 	return A2(
 		$mdgriffith$elm_ui$Element$column,
 		_List_fromArray(
@@ -19580,25 +19819,39 @@ var $author$project$Main$toolConfig = function (model) {
 			]),
 		_List_fromArray(
 			[
-				$author$project$Main$toolHeader(model.tool),
-				toolBody
+				$author$project$Main$moveToolButton(editor.tool),
+				_Utils_eq(editor.tool, $author$project$Main$MoveTool) ? A2($author$project$Main$colorConfig, editor.moveToolColor, $author$project$Main$MoveToolFilter) : $mdgriffith$elm_ui$Element$none,
+				$author$project$Main$deleteToolButton(editor.tool),
+				_Utils_eq(editor.tool, $author$project$Main$DeleteTool) ? A2($author$project$Main$colorConfig, editor.deleteToolColor, $author$project$Main$DeleteToolFilter) : $mdgriffith$elm_ui$Element$none,
+				$author$project$Main$createToolButton(editor.tool),
+				_Utils_eq(editor.tool, $author$project$Main$CreateTool) ? $author$project$Main$createToolConfig(editor) : $mdgriffith$elm_ui$Element$none
 			]));
 };
-var $author$project$Main$Undo = {$: 'Undo'};
-var $yotamDvir$elm_pivot$Pivot$Get$hasL = function (_v0) {
-	var _v1 = _v0.b;
-	var l = _v1.a;
-	return !$elm$core$List$isEmpty(l);
+var $author$project$Main$SetViewMode = function (a) {
+	return {$: 'SetViewMode', a: a};
 };
-var $yotamDvir$elm_pivot$Pivot$hasL = $yotamDvir$elm_pivot$Pivot$Get$hasL;
-var $author$project$Main$undo = function (p) {
-	return $yotamDvir$elm_pivot$Pivot$hasL(p) ? A2(
-		$mdgriffith$elm_ui$Element$el,
+var $author$project$Main$viewModeConfig = function (editor) {
+	return A2(
+		$mdgriffith$elm_ui$Element$wrappedRow,
 		_List_fromArray(
 			[
-				$mdgriffith$elm_ui$Element$Events$onClick($author$project$Main$Undo)
+				$mdgriffith$elm_ui$Element$spacing(5)
 			]),
-		$mdgriffith$elm_ui$Element$text('Undo')) : $mdgriffith$elm_ui$Element$text('Can\'t undo.');
+		_List_fromArray(
+			[
+				A4(
+				$author$project$Main$toolConfigOption,
+				editor.viewMode,
+				A2($elm$core$Basics$composeR, $author$project$Main$SetViewMode, $author$project$Main$EditorMsgWrapper),
+				$author$project$Main$ShowNumbers,
+				'Show numbers'),
+				A4(
+				$author$project$Main$toolConfigOption,
+				editor.viewMode,
+				A2($elm$core$Basics$composeR, $author$project$Main$SetViewMode, $author$project$Main$EditorMsgWrapper),
+				$author$project$Main$CleanBoard,
+				'Hide numbers')
+			]));
 };
 var $author$project$Main$sidebar = F2(
 	function (taco, model) {
@@ -19606,49 +19859,25 @@ var $author$project$Main$sidebar = F2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
+					$mdgriffith$elm_ui$Element$width(
+					A2($mdgriffith$elm_ui$Element$maximum, 400, $mdgriffith$elm_ui$Element$fill)),
 					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$fill),
 					$mdgriffith$elm_ui$Element$spacing(10),
-					$mdgriffith$elm_ui$Element$padding(10)
+					$mdgriffith$elm_ui$Element$padding(10),
+					$mdgriffith$elm_ui$Element$alignRight
 				]),
 			_List_fromArray(
 				[
 					A2(
 					$mdgriffith$elm_ui$Element$map,
 					$author$project$Main$EditorMsgWrapper,
-					A2(
-						$mdgriffith$elm_ui$Element$el,
-						_List_fromArray(
-							[
-								$mdgriffith$elm_ui$Element$Events$onClick(
-								$author$project$Main$Reset($author$project$Main$initialPosition))
-							]),
-						$mdgriffith$elm_ui$Element$text('Reset to starting position.'))),
-					A2(
-					$mdgriffith$elm_ui$Element$map,
-					$author$project$Main$EditorMsgWrapper,
-					A2(
-						$mdgriffith$elm_ui$Element$el,
-						_List_fromArray(
-							[
-								$mdgriffith$elm_ui$Element$Events$onClick(
-								$author$project$Main$Reset($author$project$Main$emptyPosition))
-							]),
-						$mdgriffith$elm_ui$Element$text('Clear board.'))),
-					A2(
-					$mdgriffith$elm_ui$Element$map,
-					$author$project$Main$EditorMsgWrapper,
-					$author$project$Main$undo(model.game)),
-					A2(
-					$mdgriffith$elm_ui$Element$map,
-					$author$project$Main$EditorMsgWrapper,
-					$author$project$Main$redo(model.game)),
+					$author$project$Main$sidebarActionButtons(model.game)),
 					A2(
 					$mdgriffith$elm_ui$Element$map,
 					$author$project$Main$EditorMsgWrapper,
 					$author$project$Main$toolConfig(model)),
-					$author$project$Main$colorSchemeConfigWhite(taco),
-					$author$project$Main$colorSchemeConfigBlack(taco),
+					$author$project$Main$colorSchemeConfig(taco),
+					$author$project$Main$viewModeConfig(model),
 					A2(
 					$mdgriffith$elm_ui$Element$map,
 					$author$project$Main$EditorMsgWrapper,
@@ -19681,7 +19910,8 @@ var $author$project$Main$editorUi = F2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+					$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
+					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$fill)
 				]),
 			_List_fromArray(
 				[
