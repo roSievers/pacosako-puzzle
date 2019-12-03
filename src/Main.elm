@@ -13,6 +13,7 @@ import Element.Input as Input
 import Element.Region
 import File.Download
 import FontAwesome.Icon exposing (Icon, viewIcon)
+import FontAwesome.Regular as Regular
 import FontAwesome.Solid as Solid
 import FontAwesome.Styles
 import Html exposing (Html)
@@ -938,7 +939,7 @@ positionView taco model position drag =
         ( _, windowHeight ) =
             model.windowSize
     in
-    el [ width (Element.px windowHeight), height fill ]
+    el [ width (Element.px windowHeight), height fill, centerX ]
         (el [ centerX, centerY ]
             (Element.html
                 (Html.div
@@ -969,11 +970,10 @@ positionView taco model position drag =
 
 sidebar : Taco -> Editor -> Element GlobalMsg
 sidebar taco model =
-    Element.column [ width fill, height fill, spacing 10, padding 10 ]
+    Element.column [ width (fill |> Element.maximum 400), height fill, spacing 10, padding 10, Element.alignRight ]
         [ sidebarActionButtons model.game |> Element.map EditorMsgWrapper
         , toolConfig model |> Element.map EditorMsgWrapper
-        , colorSchemeConfigWhite taco
-        , colorSchemeConfigBlack taco
+        , colorSchemeConfig taco
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg") |> Element.map EditorMsgWrapper
         , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png") |> Element.map EditorMsgWrapper
         , markdownCopyPaste taco model |> Element.map EditorMsgWrapper
@@ -1039,31 +1039,26 @@ resetClearBoard p =
 
 
 toolConfig : Editor -> Element Msg
-toolConfig model =
-    let
-        toolBody =
-            case model.tool of
-                MoveTool ->
-                    colorConfig model.moveToolColor MoveToolFilter
-
-                DeleteTool ->
-                    colorConfig model.deleteToolColor DeleteToolFilter
-
-                CreateTool ->
-                    createToolConfig model
-    in
+toolConfig editor =
     Element.column [ width fill ]
-        [ toolHeader model.tool
-        , toolBody
-        ]
+        [ moveToolButton editor.tool
+        , if editor.tool == MoveTool then
+            colorConfig editor.moveToolColor MoveToolFilter
 
+          else
+            Element.none
+        , deleteToolButton editor.tool
+        , if editor.tool == DeleteTool then
+            colorConfig editor.deleteToolColor DeleteToolFilter
 
-toolHeader : EditorTool -> Element Msg
-toolHeader tool =
-    Element.wrappedRow [ width fill ]
-        [ moveToolButton tool
-        , deleteToolButton tool
-        , createToolButton tool
+          else
+            Element.none
+        , createToolButton editor.tool
+        , if editor.tool == CreateTool then
+            createToolConfig editor
+
+          else
+            Element.none
         ]
 
 
@@ -1164,56 +1159,62 @@ colorConfig currentColor msg =
         ]
 
 
-colorPicker : (Pieces.SideColor -> msg) -> Pieces.SideColor -> Pieces.SideColor -> String -> Element msg
-colorPicker msg currentColor newColor colorName =
+colorPicker : (Pieces.SideColor -> msg) -> Pieces.SideColor -> Pieces.SideColor -> Element msg
+colorPicker msg currentColor newColor =
     let
-        baseAttributes =
-            [ width fill
-            , padding 5
-            , Events.onClick (msg newColor)
-            , Background.color (Pieces.colorUi newColor.fill)
-            , Border.color (Pieces.colorUi newColor.stroke)
-            ]
-
-        selectionAttributes =
+        iconChoice =
             if currentColor == newColor then
-                [ Border.width 4, Font.bold ]
+                Solid.yinYang
 
             else
-                [ Border.width 2 ]
+                Regular.circle
     in
-    Element.el (baseAttributes ++ selectionAttributes) (Element.text colorName)
+    -- icon : List (Element.Attribute msg) -> Icon -> Element msg
+    el [ width fill, Events.onClick (msg newColor), padding 5, Background.color (Pieces.colorUi newColor.stroke) ]
+        (icon
+            [ centerX
+            , Font.color (Pieces.colorUi newColor.fill)
+            ]
+            iconChoice
+        )
+
+
+colorSchemeConfig : Taco -> Element GlobalMsg
+colorSchemeConfig taco =
+    Element.column [ width fill, spacing 5 ]
+        [ Element.text "Piece colors"
+        , colorSchemeConfigWhite taco
+        , colorSchemeConfigBlack taco
+        ]
 
 
 colorSchemeConfigWhite : Taco -> Element GlobalMsg
 colorSchemeConfigWhite taco =
-    Element.wrappedRow [ spacing 2 ]
-        [ Element.text "White pieces: "
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.whitePieceColor "white"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.redPieceColor "red"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.orangePieceColor "orange"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.yellowPieceColor "yellow"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.greenPieceColor "green"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.bluePieceColor "blue"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.purplePieceColor "purple"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.pinkPieceColor "pink"
-        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.blackPieceColor "black"
+    Element.row [ width fill ]
+        [ colorPicker WhiteSideColor taco.colorScheme.white Pieces.whitePieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.redPieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.orangePieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.yellowPieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.greenPieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.bluePieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.purplePieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.pinkPieceColor
+        , colorPicker WhiteSideColor taco.colorScheme.white Pieces.blackPieceColor
         ]
 
 
 colorSchemeConfigBlack : Taco -> Element GlobalMsg
 colorSchemeConfigBlack taco =
-    Element.wrappedRow [ spacing 2 ]
-        [ Element.text "Black pieces: "
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.whitePieceColor "white"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.redPieceColor "red"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.orangePieceColor "orange"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.yellowPieceColor "yellow"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.greenPieceColor "green"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.bluePieceColor "blue"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.purplePieceColor "purple"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.pinkPieceColor "pink"
-        , colorPicker BlackSideColor taco.colorScheme.black Pieces.blackPieceColor "black"
+    Element.wrappedRow [ width fill ]
+        [ colorPicker BlackSideColor taco.colorScheme.black Pieces.whitePieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.redPieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.orangePieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.yellowPieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.greenPieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.bluePieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.purplePieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.pinkPieceColor
+        , colorPicker BlackSideColor taco.colorScheme.black Pieces.blackPieceColor
         ]
 
 
@@ -1298,7 +1299,7 @@ positionSvg config =
         idAttribute =
             case config.nodeId of
                 Just nodeId ->
-                    [ Svg.Attributes.id sakoEditorId ]
+                    [ Svg.Attributes.id nodeId ]
 
                 Nothing ->
                     []
