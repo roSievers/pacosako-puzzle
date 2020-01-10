@@ -19955,7 +19955,7 @@ var $author$project$Main$examplesList = F2(
 					$elm$core$List$map,
 					$author$project$Main$loadPositionPreview(taco),
 					examplePositions);
-				var rows = A2($elm_community$list_extra$List$Extra$greedyGroupsOf, 4, positionPreviews);
+				var rows = A2($elm_community$list_extra$List$Extra$greedyGroupsOf, 5, positionPreviews);
 				return A2(
 					$mdgriffith$elm_ui$Element$column,
 					_List_fromArray(
