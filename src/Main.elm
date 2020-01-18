@@ -896,7 +896,7 @@ examplesList taco model =
                     List.map (loadPositionPreview taco) examplePositions
 
                 rows =
-                    List.greedyGroupsOf 4 positionPreviews
+                    List.greedyGroupsOf 5 positionPreviews
             in
             Element.column [ spacing 5 ]
                 (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
