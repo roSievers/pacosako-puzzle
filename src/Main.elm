@@ -83,8 +83,54 @@ type alias LoginPageData =
     }
 
 
+{-| Represents the possible
+-}
+type SaveState
+    = SaveIsCurrent Int
+    | SaveIsModified Int
+    | SaveDoesNotExist
+    | SaveNotRequired
+
+
+{-| Update a save state when something is changed in the editor
+-}
+saveStateModify : SaveState -> SaveState
+saveStateModify old =
+    case old of
+        SaveIsCurrent id ->
+            SaveIsModified id
+
+        SaveNotRequired ->
+            SaveDoesNotExist
+
+        otherwise ->
+            otherwise
+
+
+saveStateStored : Int -> SaveState -> SaveState
+saveStateStored newId saveState =
+    SaveIsCurrent newId
+
+
+saveStateId : SaveState -> Maybe Int
+saveStateId saveState =
+    case saveState of
+        SaveIsCurrent id ->
+            Just id
+
+        SaveIsModified id ->
+            Just id
+
+        SaveDoesNotExist ->
+            Nothing
+
+        SaveNotRequired ->
+            Nothing
+
+
 type alias Editor =
-    { game : Pivot PacoPosition
+    { saveState : SaveState
+    , game : Pivot PacoPosition
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
@@ -333,6 +379,8 @@ type Msg
     | UpdateUserPaste String
     | UseUserPaste PacoPosition
     | SetViewMode ViewMode
+    | SavePosition PacoPosition SaveState
+    | PositionSaveSuccess SavePositionDone
 
 
 type BlogEditorMsg
@@ -371,7 +419,8 @@ encodeDownloadRequest record =
 
 initialEditor : Decode.Value -> Editor
 initialEditor flags =
-    { game = P.singleton initialPosition
+    { saveState = SaveNotRequired
+    , game = P.singleton initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = MoveTool
@@ -453,7 +502,7 @@ update msg model =
                 ( editorModel, editorCmd ) =
                     updateEditor editorMsg model.editor
             in
-            ( { model | editor = editorModel }, Cmd.map EditorMsgWrapper editorCmd )
+            ( { model | editor = editorModel }, editorCmd )
 
         BlogMsgWrapper blogEditorMsg ->
             let
@@ -475,7 +524,7 @@ update msg model =
                     updateEditor (Reset newPosition) model.editor
             in
             ( { model | editor = editorModel, page = EditorPage }
-            , Cmd.map EditorMsgWrapper editorCmd
+            , editorCmd
             )
 
         WhiteSideColor newSideColor ->
@@ -543,7 +592,7 @@ removeLoggedInUser taco =
     { taco | login = Nothing }
 
 
-updateEditor : Msg -> Editor -> ( Editor, Cmd Msg )
+updateEditor : Msg -> Editor -> ( Editor, Cmd GlobalMsg )
 updateEditor msg model =
     case msg of
         NoOp ->
@@ -554,7 +603,7 @@ updateEditor msg model =
         MouseDown event ->
             ( model
             , Task.attempt
-                (\res -> GotBoardPosition res event)
+                (\res -> EditorMsgWrapper (GotBoardPosition res event))
                 (Dom.getElement "boardDiv")
             )
 
@@ -606,7 +655,12 @@ updateEditor msg model =
             ( applyRedo model, Cmd.none )
 
         Reset newPosition ->
-            ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+            ( { model
+                | game = addHistoryState newPosition model.game
+                , saveState = saveStateModify model.saveState
+              }
+            , Cmd.none
+            )
 
         KeyUp stroke ->
             keyUp stroke model
@@ -652,10 +706,21 @@ updateEditor msg model =
             )
 
         UseUserPaste newPosition ->
-            ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+            ( { model
+                | game = addHistoryState newPosition model.game
+                , saveState = SaveDoesNotExist
+              }
+            , Cmd.none
+            )
 
         SetViewMode newViewMode ->
             ( { model | viewMode = newViewMode }, Cmd.none )
+
+        SavePosition position saveState ->
+            ( model, postSave position saveState )
+
+        PositionSaveSuccess data ->
+            ( { model | saveState = saveStateStored data.id model.saveState }, Cmd.none )
 
 
 applyUndo : Editor -> Editor
@@ -670,7 +735,7 @@ applyRedo model =
 
 {-| Handles all key presses.
 -}
-keyUp : KeyStroke -> Editor -> ( Editor, Cmd Msg )
+keyUp : KeyStroke -> Editor -> ( Editor, Cmd GlobalMsg )
 keyUp stroke model =
     if stroke.ctrlKey == True && stroke.altKey == False then
         ctrlKeyUp stroke.key model
@@ -681,7 +746,7 @@ keyUp stroke model =
 
 {-| Handles all ctrl + x shortcuts.
 -}
-ctrlKeyUp : String -> Editor -> ( Editor, Cmd Msg )
+ctrlKeyUp : String -> Editor -> ( Editor, Cmd GlobalMsg )
 ctrlKeyUp key model =
     case key of
         "z" ->
@@ -701,7 +766,7 @@ They may still need a lower level of history awareness where they can indicate i
 state is meant as a preview or an invalid ephemeral display state that should not be preserved.
 
 -}
-clickRelease : SvgCoord -> SvgCoord -> Editor -> ( Editor, Cmd Msg )
+clickRelease : SvgCoord -> SvgCoord -> Editor -> ( Editor, Cmd GlobalMsg )
 clickRelease down up model =
     case model.tool of
         DeleteTool ->
@@ -714,7 +779,7 @@ clickRelease down up model =
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
 
-deleteToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
+deleteToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
 deleteToolRelease down up model =
     let
         oldPosition =
@@ -729,13 +794,18 @@ deleteToolRelease down up model =
             addHistoryState { oldPosition | pieces = pieces } model.game
     in
     if up == down then
-        ( { model | game = newHistory }, Cmd.none )
+        ( { model
+            | game = newHistory
+            , saveState = saveStateModify model.saveState
+          }
+        , Cmd.none
+        )
 
     else
         ( model, Cmd.none )
 
 
-moveToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
+moveToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
 moveToolRelease down up model =
     let
         oldPosition =
@@ -763,13 +833,18 @@ moveToolRelease down up model =
             addHistoryState (newPosition ()) model.game
     in
     if whiteCount <= 1 && blackCount <= 1 then
-        ( { model | game = newHistory () }, Cmd.none )
+        ( { model
+            | game = newHistory ()
+            , saveState = saveStateModify model.saveState
+          }
+        , Cmd.none
+        )
 
     else
         ( model, Cmd.none )
 
 
-createToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd Msg )
+createToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
 createToolRelease down up model =
     let
         oldPosition =
@@ -788,7 +863,12 @@ createToolRelease down up model =
             addHistoryState (newPosition ()) model.game
     in
     if up == down && not spaceOccupied then
-        ( { model | game = newHistory () }, Cmd.none )
+        ( { model
+            | game = newHistory ()
+            , saveState = saveStateModify model.saveState
+          }
+        , Cmd.none
+        )
 
     else
         ( model, Cmd.none )
@@ -899,17 +979,22 @@ type alias PageHeaderInfo =
 
 {-| Header that is shared by all pages.
 -}
-pageHeader : Taco -> Page -> Element GlobalMsg
-pageHeader taco currentPage =
+pageHeader : Taco -> Page -> Element GlobalMsg -> Element GlobalMsg
+pageHeader taco currentPage additionalHeader =
     Element.row [ width fill, Background.color (Element.rgb255 230 230 230) ]
         [ pageHeaderButton [ Font.bold ]
             { currentPage = currentPage, targetPage = MainPage, caption = "Paco Ŝako Tools" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = EditorPage, caption = "Position Editor" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Example Positions" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = BlogPage, caption = "Blog Editor" }
-        , el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
+        , additionalHeader
         , loginHeaderInfo taco
         ]
+
+
+yourDataWillNotBeSaved : Element a
+yourDataWillNotBeSaved =
+    el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
 
 
 pageHeaderButton : List (Element.Attribute GlobalMsg) -> PageHeaderInfo -> Element GlobalMsg
@@ -927,11 +1012,13 @@ pageHeaderButton attributes { currentPage, targetPage, caption } =
 --------------------------------------------------------------------------------
 
 
+{-| The greeting that is shown when you first open the page.
+-}
 mainPageUi : Taco -> Element GlobalMsg
 mainPageUi taco =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco MainPage
+        , pageHeader taco MainPage Element.none
         , greetingText taco
         ]
 
@@ -962,7 +1049,7 @@ libraryUi : Taco -> Model -> Element GlobalMsg
 libraryUi taco model =
     Element.column [ spacing 5, width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco LibraryPage
+        , pageHeader taco LibraryPage Element.none
         , Element.text "Choose an initial board position to open the editor."
         , Element.el [ Font.size 24 ] (Element.text "Start new")
         , Element.row [ spacing 5 ]
@@ -1020,7 +1107,7 @@ loadPositionPreview taco position =
 editorUi : Taco -> Editor -> Element GlobalMsg
 editorUi taco model =
     Element.column [ width fill, height fill ]
-        [ pageHeader taco EditorPage
+        [ pageHeader taco EditorPage (saveStateHeader (P.getC model.game) model.saveState)
         , Element.row
             [ width fill, height fill ]
             [ Element.html FontAwesome.Styles.css
@@ -1028,6 +1115,34 @@ editorUi taco model =
             , sidebar taco model
             ]
         ]
+
+
+saveStateHeader : PacoPosition -> SaveState -> Element GlobalMsg
+saveStateHeader position saveState =
+    case saveState of
+        SaveIsCurrent id ->
+            el [ padding 10, Font.color (Element.rgb255 150 200 150), Font.bold ] (Element.text <| "Saved. (id=" ++ String.fromInt id ++ ")")
+
+        SaveIsModified id ->
+            el
+                [ padding 10
+                , Font.color (Element.rgb255 200 150 150)
+                , Font.bold
+                , Events.onClick (EditorMsgWrapper (SavePosition position saveState))
+                ]
+                (Element.text <| "Unsaved Changes! (id=" ++ String.fromInt id ++ ")")
+
+        SaveDoesNotExist ->
+            el
+                [ padding 10
+                , Font.color (Element.rgb255 200 150 150)
+                , Font.bold
+                , Events.onClick (EditorMsgWrapper (SavePosition position saveState))
+                ]
+                (Element.text "Unsaved Changes!")
+
+        SaveNotRequired ->
+            Element.none
 
 
 {-| We render the board view slightly smaller than the window in order to avoid artifacts.
@@ -1622,8 +1737,8 @@ parsedMarkdownPaste taco model =
 {-| Converts a Paco Ŝako position into a human readable version that can be
 copied and stored in a text file.
 -}
-markdownExchangeNotation : List PacoPiece -> String
-markdownExchangeNotation pieces =
+abstractExchangeNotation : { lineSeparator : String } -> List PacoPiece -> String
+abstractExchangeNotation config pieces =
     let
         dictRepresentation =
             pacoPositionAsGrid pieces
@@ -1651,7 +1766,12 @@ markdownExchangeNotation pieces =
     in
     indices
         |> List.map markdownRow
-        |> String.join "\n"
+        |> String.join config.lineSeparator
+
+
+markdownExchangeNotation : List PacoPiece -> String
+markdownExchangeNotation pieces =
+    abstractExchangeNotation { lineSeparator = "\n" } pieces
 
 
 type TileState
@@ -1874,7 +1994,7 @@ blogUi : Taco -> Blog -> Element GlobalMsg
 blogUi taco blog =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco BlogPage
+        , pageHeader taco BlogPage yourDataWillNotBeSaved
         , Element.row [ Element.width Element.fill ]
             [ Input.multiline [ Element.width (Element.px 600) ]
                 { onChange = OnMarkdownInput >> BlogMsgWrapper
@@ -2024,7 +2144,7 @@ loginUi : Taco -> LoginPageData -> Element GlobalMsg
 loginUi taco loginPageData =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco LoginPage
+        , pageHeader taco LoginPage Element.none
         , case taco.login of
             Just user ->
                 loginInfoPage user
@@ -2142,4 +2262,74 @@ getLogout =
     Http.get
         { url = "/api/logout"
         , expect = Http.expectWhatever (defaultErrorHandler (\() -> LogoutSuccess))
+        }
+
+
+postSave : PacoPosition -> SaveState -> Cmd GlobalMsg
+postSave position saveState =
+    case saveStateId saveState of
+        Just id ->
+            postSaveUpdate position id
+
+        Nothing ->
+            postSaveCreate position
+
+
+{-| The server treats this object as an opaque JSON object.
+-}
+type alias CreatePositionData =
+    { notation : String
+    }
+
+
+encodeCreatePositionData : CreatePositionData -> Value
+encodeCreatePositionData record =
+    Encode.object
+        [ ( "notation", Encode.string <| record.notation )
+        ]
+
+
+encodeCreatePosition : PacoPosition -> Value
+encodeCreatePosition position =
+    Encode.object
+        [ ( "data"
+          , encodeCreatePositionData
+                { notation = markdownExchangeNotation position.pieces
+                }
+          )
+        ]
+
+
+type alias SavePositionDone =
+    { id : Int
+    }
+
+
+decodeSavePositionDone : Decode.Decoder SavePositionDone
+decodeSavePositionDone =
+    Decode.map SavePositionDone
+        (Decode.field "id" Decode.int)
+
+
+postSaveCreate : PacoPosition -> Cmd GlobalMsg
+postSaveCreate position =
+    Http.post
+        { url = "/api/position"
+        , body = Http.jsonBody (encodeCreatePosition position)
+        , expect =
+            Http.expectJson
+                (defaultErrorHandler (EditorMsgWrapper << PositionSaveSuccess))
+                decodeSavePositionDone
+        }
+
+
+postSaveUpdate : PacoPosition -> Int -> Cmd GlobalMsg
+postSaveUpdate position id =
+    Http.post
+        { url = "/api/position/" ++ String.fromInt id
+        , body = Http.jsonBody (encodeCreatePosition position)
+        , expect =
+            Http.expectJson
+                (defaultErrorHandler (EditorMsgWrapper << PositionSaveSuccess))
+                decodeSavePositionDone
         }
