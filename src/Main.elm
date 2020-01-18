@@ -20,8 +20,8 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Http
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
 import Markdown.Parser
@@ -52,6 +52,7 @@ type alias Model =
     , page : Page
     , editor : Editor
     , blog : Blog
+    , login : LoginPageData
     , exampleFile : WebData (List PacoPosition)
     }
 
@@ -61,10 +62,25 @@ type Page
     | EditorPage
     | LibraryPage
     | BlogPage
+    | LoginPage
+
+
+type alias User =
+    { id : Int
+    , username : String
+    }
 
 
 type alias Taco =
-    { colorScheme : Pieces.ColorScheme }
+    { colorScheme : Pieces.ColorScheme
+    , login : Maybe User
+    }
+
+
+type alias LoginPageData =
+    { usernameRaw : String
+    , passwordRaw : String
+    }
 
 
 type alias Editor =
@@ -278,14 +294,19 @@ type alias Rect =
 
 
 type GlobalMsg
-    = EditorMsgWrapper Msg
+    = GlobalNoOp
+    | EditorMsgWrapper Msg
     | BlogMsgWrapper BlogEditorMsg
+    | LoginMsgWrapper LoginPageMsg
     | LoadIntoEditor PacoPosition
     | OpenPage Page
     | WhiteSideColor Pieces.SideColor
     | BlackSideColor Pieces.SideColor
     | GetLibrarySuccess String
     | GetLibraryFailure Http.Error
+    | HttpError Http.Error
+    | LoginSuccess User
+    | LogoutSuccess
 
 
 {-| Messages that may only affect data in the position editor page.
@@ -316,6 +337,13 @@ type Msg
 
 type BlogEditorMsg
     = OnMarkdownInput String
+
+
+type LoginPageMsg
+    = TypeUsername String
+    | TypePassword String
+    | TryLogin
+    | Logout
 
 
 type alias KeyStroke =
@@ -362,9 +390,14 @@ initialBlog =
     { text = StaticText.blogEditorExampleText }
 
 
+initialLogin : LoginPageData
+initialLogin =
+    { usernameRaw = "", passwordRaw = "" }
+
+
 initialTaco : Taco
 initialTaco =
-    { colorScheme = Pieces.defaultColorScheme }
+    { colorScheme = Pieces.defaultColorScheme, login = Nothing }
 
 
 parseWindowSize : Decode.Value -> ( Int, Int )
@@ -386,12 +419,16 @@ init flags =
       , page = MainPage
       , editor = initialEditor flags
       , blog = initialBlog
+      , login = initialLogin
       , exampleFile = RemoteData.Loading
       }
-    , Http.get
-        { expect = Http.expectString expectLibrary
-        , url = "static/examples.txt"
-        }
+    , Cmd.batch
+        [ Http.get
+            { expect = Http.expectString expectLibrary
+            , url = "static/examples.txt"
+            }
+        , getCurrentLogin
+        ]
     )
 
 
@@ -408,6 +445,9 @@ expectLibrary result =
 update : GlobalMsg -> Model -> ( Model, Cmd GlobalMsg )
 update msg model =
     case msg of
+        GlobalNoOp ->
+            ( model, Cmd.none )
+
         EditorMsgWrapper editorMsg ->
             let
                 ( editorModel, editorCmd ) =
@@ -421,6 +461,13 @@ update msg model =
                     updateBlogEditor blogEditorMsg model.blog
             in
             ( { model | blog = blogEditorModel }, blogEditorCmd )
+
+        LoginMsgWrapper loginPageMsg ->
+            let
+                ( loginPageModel, loginPageCmd ) =
+                    updateLoginPage loginPageMsg model.login
+            in
+            ( { model | login = loginPageModel }, loginPageCmd )
 
         LoadIntoEditor newPosition ->
             let
@@ -459,12 +506,41 @@ update msg model =
         OpenPage newPage ->
             ( { model | page = newPage }, Cmd.none )
 
+        LoginSuccess user ->
+            ( { model
+                | taco = setLoggedInUser user model.taco
+                , login = initialLogin
+              }
+            , Cmd.none
+            )
+
+        LogoutSuccess ->
+            ( { model
+                | taco = removeLoggedInUser model.taco
+                , login = initialLogin
+              }
+            , Cmd.none
+            )
+
+        HttpError error ->
+            Debug.log "Http Error" (Debug.toString error) |> (\_ -> ( model, Cmd.none ))
+
 
 {-| Helper function to update the color scheme inside the taco.
 -}
 setColorScheme : Pieces.ColorScheme -> Taco -> Taco
 setColorScheme colorScheme taco =
     { taco | colorScheme = colorScheme }
+
+
+setLoggedInUser : User -> Taco -> Taco
+setLoggedInUser user taco =
+    { taco | login = Just user }
+
+
+removeLoggedInUser : Taco -> Taco
+removeLoggedInUser taco =
+    { taco | login = Nothing }
 
 
 updateEditor : Msg -> Editor -> ( Editor, Cmd Msg )
@@ -768,6 +844,22 @@ updateBlogEditor msg blog =
             ( { blog | text = newText }, Cmd.none )
 
 
+updateLoginPage : LoginPageMsg -> LoginPageData -> ( LoginPageData, Cmd GlobalMsg )
+updateLoginPage msg loginPageModel =
+    case msg of
+        TypeUsername newText ->
+            ( { loginPageModel | usernameRaw = newText }, Cmd.none )
+
+        TypePassword newText ->
+            ( { loginPageModel | passwordRaw = newText }, Cmd.none )
+
+        TryLogin ->
+            ( loginPageModel, postLoginPassword { username = loginPageModel.usernameRaw, password = loginPageModel.passwordRaw } )
+
+        Logout ->
+            ( loginPageModel, getLogout )
+
+
 
 --------------------------------------------------------------------------------
 -- View code -------------------------------------------------------------------
@@ -794,6 +886,9 @@ globalUi model =
         BlogPage ->
             blogUi model.taco model.blog
 
+        LoginPage ->
+            loginUi model.taco model.login
+
 
 type alias PageHeaderInfo =
     { currentPage : Page
@@ -804,8 +899,8 @@ type alias PageHeaderInfo =
 
 {-| Header that is shared by all pages.
 -}
-pageHeader : Page -> Element GlobalMsg
-pageHeader currentPage =
+pageHeader : Taco -> Page -> Element GlobalMsg
+pageHeader taco currentPage =
     Element.row [ width fill, Background.color (Element.rgb255 230 230 230) ]
         [ pageHeaderButton [ Font.bold ]
             { currentPage = currentPage, targetPage = MainPage, caption = "Paco Ŝako Tools" }
@@ -813,6 +908,7 @@ pageHeader currentPage =
         , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Example Positions" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = BlogPage, caption = "Blog Editor" }
         , el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
+        , loginHeaderInfo taco
         ]
 
 
@@ -834,7 +930,8 @@ pageHeaderButton attributes { currentPage, targetPage, caption } =
 mainPageUi : Taco -> Element GlobalMsg
 mainPageUi taco =
     Element.column [ width fill ]
-        [ pageHeader MainPage
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco MainPage
         , greetingText taco
         ]
 
@@ -864,7 +961,8 @@ greetingText taco =
 libraryUi : Taco -> Model -> Element GlobalMsg
 libraryUi taco model =
     Element.column [ spacing 5, width fill ]
-        [ pageHeader LibraryPage
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco LibraryPage
         , Element.text "Choose an initial board position to open the editor."
         , Element.el [ Font.size 24 ] (Element.text "Start new")
         , Element.row [ spacing 5 ]
@@ -922,7 +1020,7 @@ loadPositionPreview taco position =
 editorUi : Taco -> Editor -> Element GlobalMsg
 editorUi taco model =
     Element.column [ width fill, height fill ]
-        [ pageHeader EditorPage
+        [ pageHeader taco EditorPage
         , Element.row
             [ width fill, height fill ]
             [ Element.html FontAwesome.Styles.css
@@ -1775,7 +1873,8 @@ sepBy content separator =
 blogUi : Taco -> Blog -> Element GlobalMsg
 blogUi taco blog =
     Element.column [ width fill ]
-        [ pageHeader BlogPage
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco BlogPage
         , Element.row [ Element.width Element.fill ]
             [ Input.multiline [ Element.width (Element.px 600) ]
                 { onChange = OnMarkdownInput >> BlogMsgWrapper
@@ -1909,3 +2008,138 @@ rawTextToId rawText =
 code : String -> Element msg
 code snippet =
     Element.text snippet
+
+
+
+--------------------------------------------------------------------------------
+-- Login ui --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- type alias LoginPageData =
+--     { usernameRaw : String
+--     , passwordRaw : String
+--     }
+
+
+loginUi : Taco -> LoginPageData -> Element GlobalMsg
+loginUi taco loginPageData =
+    Element.column [ width fill ]
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco LoginPage
+        , case taco.login of
+            Just user ->
+                loginInfoPage user
+
+            Nothing ->
+                loginDialog taco loginPageData
+        ]
+
+
+loginDialog : Taco -> LoginPageData -> Element GlobalMsg
+loginDialog taco loginPageData =
+    Element.column []
+        [ Input.username []
+            { label = Input.labelAbove [] (Element.text "Username")
+            , onChange = TypeUsername >> LoginMsgWrapper
+            , placeholder = Just (Input.placeholder [] (Element.text "Username"))
+            , text = loginPageData.usernameRaw
+            }
+        , Input.currentPassword []
+            { label = Input.labelAbove [] (Element.text "Password")
+            , onChange = TypePassword >> LoginMsgWrapper
+            , placeholder = Just (Input.placeholder [] (Element.text "Password"))
+            , text = loginPageData.passwordRaw
+            , show = False
+            }
+        , Input.button [] { label = Element.text "Login", onPress = Just (LoginMsgWrapper TryLogin) }
+        ]
+
+
+loginInfoPage : User -> Element GlobalMsg
+loginInfoPage user =
+    Element.column [ padding 10, spacing 10 ]
+        [ Element.text ("Username: " ++ user.username)
+        , Element.text ("ID: " ++ String.fromInt user.id)
+        , Input.button [] { label = Element.text "Logout", onPress = Just (LoginMsgWrapper Logout) }
+        ]
+
+
+loginHeaderInfo : Taco -> Element GlobalMsg
+loginHeaderInfo taco =
+    let
+        loginCaption =
+            case taco.login of
+                Just user ->
+                    Element.row [ padding 10, spacing 10 ] [ icon [] Solid.user, Element.text user.username ]
+
+                Nothing ->
+                    Element.row [ padding 10, spacing 10 ] [ icon [] Solid.signInAlt, Element.text "Login" ]
+    in
+    Element.el [ Element.alignRight, Events.onClick (OpenPage LoginPage) ] loginCaption
+
+
+
+--------------------------------------------------------------------------------
+-- REST api --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+defaultErrorHandler : (a -> GlobalMsg) -> Result Http.Error a -> GlobalMsg
+defaultErrorHandler happyPath result =
+    case result of
+        Ok username ->
+            happyPath username
+
+        Err error ->
+            HttpError error
+
+
+type alias LoginData =
+    { username : String
+    , password : String
+    }
+
+
+encodeLoginData : LoginData -> Value
+encodeLoginData record =
+    Encode.object
+        [ ( "username", Encode.string <| record.username )
+        , ( "password", Encode.string <| record.password )
+        ]
+
+
+decodeUser : Decode.Decoder User
+decodeUser =
+    Decode.map2 User
+        (Decode.field "user_id" Decode.int)
+        (Decode.field "username" Decode.string)
+
+
+postLoginPassword : LoginData -> Cmd GlobalMsg
+postLoginPassword data =
+    Http.post
+        { url = "/api/login/password"
+        , body = Http.jsonBody (encodeLoginData data)
+        , expect = Http.expectJson (defaultErrorHandler LoginSuccess) decodeUser
+        }
+
+
+getCurrentLogin : Cmd GlobalMsg
+getCurrentLogin =
+    Http.get
+        { url = "/api/user_id"
+        , expect =
+            Http.expectJson
+                (Result.toMaybe
+                    >> Maybe.map LoginSuccess
+                    >> Maybe.withDefault GlobalNoOp
+                )
+                decodeUser
+        }
+
+
+getLogout : Cmd GlobalMsg
+getLogout =
+    Http.get
+        { url = "/api/logout"
+        , expect = Http.expectWhatever (defaultErrorHandler (\() -> LogoutSuccess))
+        }
