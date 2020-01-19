@@ -5,7 +5,11 @@ mainPageGreetingText : String
 mainPageGreetingText =
     """# A tool collection for Paco Ŝako
 
-I am working on various tool to help us communicate about Paco Ŝako. Currently there is a "Position Editor" which you can use to create Paco Ŝako positions and generate images. You can download the images as a PNG if you want to share it. There is also a SVG export available, if you want to change the image in any way.
+Paco Ŝako is a new form of chess created to be an expression of peace, friendship and collaboration, designed with an exciting gameplay. This website hosts some tools to help us communicate about Paco Ŝako.
+
+## Designing positions
+
+The Feature that is currently best developed is the position editor. Here you can arrange Paco Ŝako pieces as you please and export the result as an image. You can download it as a png file for easy sharing, or download a raw SVG file that you can edit later.
 
 ```
 .. .K .. .. .. .. BP ..
@@ -20,12 +24,17 @@ P. P. .. .. .. .P .. ..
 
 If you want some more examples, check out the *Library* page!
 
-We don't have any user profiles yet, this means you can not save any positions you create with this tool. Right now, there is only a text export that you need to save to a file.
+If you want to store the positions you have designed in the editor, you will need to log in. There is no sign up system at the moment, so you will need to ask Rolf to create an account for you. As a workaround, there is also a text export that you can use to save to a position.
 
+### Analysing positions
+
+I already have a tool which can perform ŝako analysis on a given position, this is developed in the [Paco Ŝako Rust](https://github.com/roSievers/pacosako-rust) project. Eventually, this functionality will be integrated into the position editor.
 
 ## Writing about Paco Ŝako
 
-The tool collection now also includes a simple text editor that you can use to write texts on Paco Ŝako. The nice thing abouth this editor is, that you can directly embed positions from the editor into the text."""
+The tool collection now also includes a *Blog Editor* that you can use to write texts on Paco Ŝako. The nice thing about this editor is, that you can directly embed positions from the editor into the text.
+
+Note that even with a user account, the content you edit in the Blog editor can not be saved yet. Please make sure to save your texts in a text file."""
 
 
 blogEditorExampleText : String
