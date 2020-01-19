@@ -20,7 +20,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Http
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
@@ -53,7 +53,10 @@ type alias Model =
     , editor : Editor
     , blog : Blog
     , login : LoginPageData
+
+    -- LibraryPage
     , exampleFile : WebData (List PacoPosition)
+    , storedPositions : WebData (List StoredPosition)
     }
 
 
@@ -353,6 +356,7 @@ type GlobalMsg
     | HttpError Http.Error
     | LoginSuccess User
     | LogoutSuccess
+    | AllPositionsLoadedSuccess (List StoredPosition)
 
 
 {-| Messages that may only affect data in the position editor page.
@@ -470,6 +474,7 @@ init flags =
       , blog = initialBlog
       , login = initialLogin
       , exampleFile = RemoteData.Loading
+      , storedPositions = RemoteData.NotAsked
       }
     , Cmd.batch
         [ Http.get
@@ -559,20 +564,25 @@ update msg model =
             ( { model
                 | taco = setLoggedInUser user model.taco
                 , login = initialLogin
+                , storedPositions = RemoteData.Loading
               }
-            , Cmd.none
+            , getAllSavedPositions
             )
 
         LogoutSuccess ->
             ( { model
                 | taco = removeLoggedInUser model.taco
                 , login = initialLogin
+                , storedPositions = RemoteData.NotAsked
               }
             , Cmd.none
             )
 
         HttpError error ->
             Debug.log "Http Error" (Debug.toString error) |> (\_ -> ( model, Cmd.none ))
+
+        AllPositionsLoadedSuccess list ->
+            ( { model | storedPositions = RemoteData.Success list }, Cmd.none )
 
 
 {-| Helper function to update the color scheme inside the taco.
@@ -985,7 +995,7 @@ pageHeader taco currentPage additionalHeader =
         [ pageHeaderButton [ Font.bold ]
             { currentPage = currentPage, targetPage = MainPage, caption = "Paco Ŝako Tools" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = EditorPage, caption = "Position Editor" }
-        , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Example Positions" }
+        , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Library" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = BlogPage, caption = "Blog Editor" }
         , additionalHeader
         , loginHeaderInfo taco
@@ -1057,7 +1067,7 @@ libraryUi taco model =
             , loadPositionPreview taco initialPosition
             ]
         , Element.el [ Font.size 24 ] (Element.text "Load saved position")
-        , Element.text "Sorry, but saving positions is not supported yet."
+        , storedPositionList taco model
         , Element.el [ Font.size 24 ] (Element.text "Load examples")
         , examplesList taco model
         ]
@@ -1085,6 +1095,38 @@ examplesList taco model =
             in
             Element.column [ spacing 5 ]
                 (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
+
+
+storedPositionList : Taco -> Model -> Element GlobalMsg
+storedPositionList taco model =
+    case model.storedPositions of
+        RemoteData.NotAsked ->
+            Element.text "Log in to load stored positions."
+
+        RemoteData.Loading ->
+            Element.text "Loading stored positions."
+
+        RemoteData.Failure _ ->
+            Element.text "Error while loading stored positions."
+
+        RemoteData.Success positions ->
+            let
+                positionPreviews =
+                    positions
+                        |> List.filterMap buildPacoPositionFromStoredPosition
+                        |> List.map (loadPositionPreview taco)
+
+                rows =
+                    List.greedyGroupsOf 5 positionPreviews
+            in
+            Element.column [ spacing 5 ]
+                (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
+
+
+buildPacoPositionFromStoredPosition : StoredPosition -> Maybe PacoPosition
+buildPacoPositionFromStoredPosition storedPosition =
+    Parser.run parsePosition storedPosition.data.notation
+        |> Result.toMaybe
 
 
 loadPositionPreview : Taco -> PacoPosition -> Element GlobalMsg
@@ -2134,10 +2176,6 @@ code snippet =
 --------------------------------------------------------------------------------
 -- Login ui --------------------------------------------------------------------
 --------------------------------------------------------------------------------
--- type alias LoginPageData =
---     { usernameRaw : String
---     , passwordRaw : String
---     }
 
 
 loginUi : Taco -> LoginPageData -> Element GlobalMsg
@@ -2332,4 +2370,38 @@ postSaveUpdate position id =
             Http.expectJson
                 (defaultErrorHandler (EditorMsgWrapper << PositionSaveSuccess))
                 decodeSavePositionDone
+        }
+
+
+type alias StoredPosition =
+    { id : Int
+    , owner : Int
+    , data : StoredPositionData
+    }
+
+
+type alias StoredPositionData =
+    { notation : String
+    }
+
+
+decodeStoredPosition : Decode.Decoder StoredPosition
+decodeStoredPosition =
+    Decode.map3 StoredPosition
+        (Decode.field "id" Decode.int)
+        (Decode.field "owner" Decode.int)
+        (Decode.field "data" decodeStoredPositionData)
+
+
+decodeStoredPositionData : Decode.Decoder StoredPositionData
+decodeStoredPositionData =
+    Decode.map StoredPositionData
+        (Decode.field "notation" Decode.string)
+
+
+getAllSavedPositions : Cmd GlobalMsg
+getAllSavedPositions =
+    Http.get
+        { url = "/api/position"
+        , expect = Http.expectJson (defaultErrorHandler AllPositionsLoadedSuccess) (Decode.list decodeStoredPosition)
         }

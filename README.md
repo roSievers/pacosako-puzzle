@@ -4,7 +4,11 @@ Paco Ŝako puzzle and game analysis frontend written as an Elm SPA without any b
 
 ## Running 
 
+    # When running without backend
     elm-live src/Main.elm --start-page static/index.html -- --output=elm.js
+
+    # When attached to a backend
+    elm-live src/Main.elm --no-server -- --output=elm.js
 
 ## License
 
