@@ -63,4 +63,6 @@ N. .. .. .. .. .. .. .R
 P. .P R. .R .. PN .. .P
 .P P. .. .. .. .. .. PB
 .. .. .. .. .. .. BN R.
-```"""
+```
+
+Note that even with a user account, the content you edit in the Blog editor can not be saved yet. Please make sure to save your texts in a text file."""
