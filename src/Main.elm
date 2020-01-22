@@ -1061,11 +1061,6 @@ libraryUi taco model =
         [ Element.html FontAwesome.Styles.css
         , pageHeader taco LibraryPage Element.none
         , Element.text "Choose an initial board position to open the editor."
-        , Element.el [ Font.size 24 ] (Element.text "Start new")
-        , Element.row [ spacing 5 ]
-            [ loadPositionPreview taco emptyPosition
-            , loadPositionPreview taco initialPosition
-            ]
         , Element.el [ Font.size 24 ] (Element.text "Load saved position")
         , storedPositionList taco model
         , Element.el [ Font.size 24 ] (Element.text "Load examples")
@@ -1075,52 +1070,33 @@ libraryUi taco model =
 
 examplesList : Taco -> Model -> Element GlobalMsg
 examplesList taco model =
-    case model.exampleFile of
-        RemoteData.NotAsked ->
-            Element.none
-
-        RemoteData.Loading ->
-            Element.text "Loading examples"
-
-        RemoteData.Failure _ ->
-            Element.text "Error while loading examples."
-
-        RemoteData.Success examplePositions ->
-            let
-                positionPreviews =
-                    List.map (loadPositionPreview taco) examplePositions
-
-                rows =
-                    List.greedyGroupsOf 5 positionPreviews
-            in
-            Element.column [ spacing 5 ]
-                (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
+    remoteDataHelper
+        { notAsked = Element.text "Examples were never requested."
+        , loading = Element.text "Loading example positions ..."
+        , failure = \_ -> Element.text "Error while loading example positions!"
+        }
+        (\examplePositions ->
+            examplePositions
+                |> List.map (loadPositionPreview taco)
+                |> easyGrid 4 [ spacing 5 ]
+        )
+        model.exampleFile
 
 
 storedPositionList : Taco -> Model -> Element GlobalMsg
 storedPositionList taco model =
-    case model.storedPositions of
-        RemoteData.NotAsked ->
-            Element.text "Log in to load stored positions."
-
-        RemoteData.Loading ->
-            Element.text "Loading stored positions."
-
-        RemoteData.Failure _ ->
-            Element.text "Error while loading stored positions."
-
-        RemoteData.Success positions ->
-            let
-                positionPreviews =
-                    positions
-                        |> List.filterMap buildPacoPositionFromStoredPosition
-                        |> List.map (loadPositionPreview taco)
-
-                rows =
-                    List.greedyGroupsOf 5 positionPreviews
-            in
-            Element.column [ spacing 5 ]
-                (rows |> List.map (\group -> Element.row [ spacing 5 ] group))
+    remoteDataHelper
+        { notAsked = Element.text "Please log in to load stored positions."
+        , loading = Element.text "Loading stored positions ..."
+        , failure = \_ -> Element.text "Error while loading stored positions!"
+        }
+        (\positions ->
+            positions
+                |> List.filterMap buildPacoPositionFromStoredPosition
+                |> List.map (loadPositionPreview taco)
+                |> easyGrid 4 [ spacing 5 ]
+        )
+        model.storedPositions
 
 
 buildPacoPositionFromStoredPosition : StoredPosition -> Maybe PacoPosition
@@ -1144,6 +1120,12 @@ loadPositionPreview taco position =
             )
             |> Element.map EditorMsgWrapper
         )
+
+
+
+--------------------------------------------------------------------------------
+-- Editor viev -----------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 
 editorUi : Taco -> Editor -> Element GlobalMsg
@@ -1776,6 +1758,12 @@ parsedMarkdownPaste taco model =
                 ]
 
 
+
+--------------------------------------------------------------------------------
+-- Exchange notation parsing and serialization ---------------------------------
+--------------------------------------------------------------------------------
+
+
 {-| Converts a Paco Ŝako position into a human readable version that can be
 copied and stored in a text file.
 -}
@@ -1981,6 +1969,9 @@ parsePosition =
 
 
 {-| A library is a list of PacoPositions separated by a newline.
+Deprecated: In the future the examples won't come from a file, instead it will
+be read from the server in a json where each position data has a separate
+field anyway. Then this function won't be needed anymore.
 -}
 parseLibrary : Parser (List PacoPosition)
 parseLibrary =
@@ -2405,3 +2396,50 @@ getAllSavedPositions =
         { url = "/api/position"
         , expect = Http.expectJson (defaultErrorHandler AllPositionsLoadedSuccess) (Decode.list decodeStoredPosition)
         }
+
+
+
+--------------------------------------------------------------------------------
+-- View Components -------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- View components should not depend on any information that is specific to this
+-- application. I am planing to move this whole block into a separate file when
+-- all components that I have identified are moved into this block.
+
+
+{-| Creates a grid with the given amount of columns. You can pass in a list of
+attributes which will be applied to both the column and row element. Typically
+you would pass in `[ spacing 5 ]` in here.
+-}
+easyGrid : Int -> List (Element.Attribute msg) -> List (Element msg) -> Element msg
+easyGrid columnCount attributes list =
+    list
+        |> List.greedyGroupsOf columnCount
+        |> List.map (\group -> Element.row attributes group)
+        |> Element.column attributes
+
+
+{-| Render remote data into an Element, while providing fallbacks for error
+cases in a compact form.
+-}
+remoteDataHelper :
+    { notAsked : Element msg
+    , loading : Element msg
+    , failure : e -> Element msg
+    }
+    -> (a -> Element msg)
+    -> RemoteData.RemoteData e a
+    -> Element msg
+remoteDataHelper config display data =
+    case data of
+        RemoteData.NotAsked ->
+            config.notAsked
+
+        RemoteData.Loading ->
+            config.loading
+
+        RemoteData.Failure e ->
+            config.failure e
+
+        RemoteData.Success a ->
+            display a
