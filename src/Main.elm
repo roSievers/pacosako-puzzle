@@ -361,6 +361,8 @@ type Msg
     | SetViewMode ViewMode
     | SavePosition PacoPosition SaveState
     | PositionSaveSuccess SavePositionDone
+    | RequestRandomPosition
+    | GotRandomPosition PacoPosition
 
 
 type BlogEditorMsg
@@ -707,6 +709,12 @@ updateEditor msg model =
 
         PositionSaveSuccess data ->
             ( { model | saveState = saveStateStored data.id model.saveState }, Cmd.none )
+
+        RequestRandomPosition ->
+            ( model, getRandomPosition )
+
+        GotRandomPosition newPosition ->
+            ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
 
 
 applyUndo : Editor -> Editor
@@ -1208,6 +1216,7 @@ sidebarActionButtons p =
         , redo p
         , resetStartingBoard p
         , resetClearBoard p
+        , randomPosition
         ]
 
 
@@ -1257,6 +1266,11 @@ resetClearBoard p =
 
     else
         flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.broom)
+
+
+randomPosition : Element Msg
+randomPosition =
+    flatButton (Just RequestRandomPosition) (icon [] Solid.dice)
 
 
 toolConfig : Editor -> Element Msg
@@ -2115,6 +2129,26 @@ getAllSavedPositions =
     Http.get
         { url = "/api/position"
         , expect = Http.expectJson (defaultErrorHandler AllPositionsLoadedSuccess) (Decode.list decodeStoredPosition)
+        }
+
+
+decodePacoPositionData : Decode.Decoder PacoPosition
+decodePacoPositionData =
+    Decode.andThen
+        (\json ->
+            json.notation
+                |> Sako.importExchangeNotation
+                |> Result.map (pacoPositionFromPieces >> Decode.succeed)
+                |> Result.withDefault (Decode.fail "Data has wrong shape.")
+        )
+        decodeStoredPositionData
+
+
+getRandomPosition : Cmd GlobalMsg
+getRandomPosition =
+    Http.get
+        { url = "/api/random"
+        , expect = Http.expectJson (defaultErrorHandler (EditorMsgWrapper << GotRandomPosition)) decodePacoPositionData
         }
 
 
