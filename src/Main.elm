@@ -146,6 +146,7 @@ type alias Editor =
     , userPaste : String
     , pasteParsed : PositionParseResult
     , viewMode : ViewMode
+    , analysis : Maybe AnalysisReport
     }
 
 
@@ -363,6 +364,8 @@ type Msg
     | PositionSaveSuccess SavePositionDone
     | RequestRandomPosition
     | GotRandomPosition PacoPosition
+    | RequestAnalysePosition PacoPosition
+    | GotAnalysePosition AnalysisReport
 
 
 type BlogEditorMsg
@@ -413,6 +416,7 @@ initialEditor flags =
     , userPaste = ""
     , pasteParsed = NoInput
     , viewMode = ShowNumbers
+    , analysis = Nothing
     }
 
 
@@ -645,8 +649,8 @@ updateEditor msg model =
         Reset newPosition ->
             ( { model
                 | game = addHistoryState newPosition model.game
-                , saveState = saveStateModify model.saveState
               }
+                |> editorStateModify
             , Cmd.none
             )
 
@@ -715,6 +719,20 @@ updateEditor msg model =
 
         GotRandomPosition newPosition ->
             ( { model | game = addHistoryState newPosition model.game }, Cmd.none )
+
+        RequestAnalysePosition position ->
+            ( model, postAnalysePosition position )
+
+        GotAnalysePosition analysis ->
+            ( { model | analysis = Just analysis }, Cmd.none )
+
+
+editorStateModify : Editor -> Editor
+editorStateModify editorModel =
+    { editorModel
+        | saveState = saveStateModify editorModel.saveState
+        , analysis = Nothing
+    }
 
 
 applyUndo : Editor -> Editor
@@ -790,8 +808,8 @@ deleteToolRelease down up model =
     if up == down then
         ( { model
             | game = newHistory
-            , saveState = saveStateModify model.saveState
           }
+            |> editorStateModify
         , Cmd.none
         )
 
@@ -829,8 +847,8 @@ moveToolRelease down up model =
     if whiteCount <= 1 && blackCount <= 1 then
         ( { model
             | game = newHistory ()
-            , saveState = saveStateModify model.saveState
           }
+            |> editorStateModify
         , Cmd.none
         )
 
@@ -859,8 +877,8 @@ createToolRelease down up model =
     if up == down && not spaceOccupied then
         ( { model
             | game = newHistory ()
-            , saveState = saveStateModify model.saveState
           }
+            |> editorStateModify
         , Cmd.none
         )
 
@@ -1206,6 +1224,7 @@ sidebar taco model =
         , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg") |> Element.map EditorMsgWrapper
         , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png") |> Element.map EditorMsgWrapper
         , markdownCopyPaste taco model |> Element.map EditorMsgWrapper
+        , analysisResult model
         ]
 
 
@@ -1217,6 +1236,7 @@ sidebarActionButtons p =
         , resetStartingBoard p
         , resetClearBoard p
         , randomPosition
+        , analysePosition (P.getC p)
         ]
 
 
@@ -1271,6 +1291,11 @@ resetClearBoard p =
 randomPosition : Element Msg
 randomPosition =
     flatButton (Just RequestRandomPosition) (icon [] Solid.dice)
+
+
+analysePosition : PacoPosition -> Element Msg
+analysePosition position =
+    flatButton (Just (RequestAnalysePosition position)) (icon [] Solid.calculator)
 
 
 toolConfig : Editor -> Element Msg
@@ -1749,6 +1774,18 @@ parsedMarkdownPaste taco model =
                 ]
 
 
+analysisResult : Editor -> Element msg
+analysisResult editorModel =
+    case editorModel.analysis of
+        Just analysis ->
+            Element.paragraph []
+                [ Element.text analysis.text_summary
+                ]
+
+        Nothing ->
+            Element.none
+
+
 
 --------------------------------------------------------------------------------
 -- Blog editor ui --------------------------------------------------------------
@@ -2149,6 +2186,31 @@ getRandomPosition =
     Http.get
         { url = "/api/random"
         , expect = Http.expectJson (defaultErrorHandler (EditorMsgWrapper << GotRandomPosition)) decodePacoPositionData
+        }
+
+
+type alias AnalysisReport =
+    { text_summary : String
+
+    -- TODO: search_result: SakoSearchResult,
+    }
+
+
+decodeAnalysisReport : Decode.Decoder AnalysisReport
+decodeAnalysisReport =
+    Decode.map AnalysisReport
+        (Decode.field "text_summary" Decode.string)
+
+
+postAnalysePosition : PacoPosition -> Cmd GlobalMsg
+postAnalysePosition position =
+    Http.post
+        { url = "/api/analyse"
+        , body = Http.jsonBody (encodeCreatePosition position)
+        , expect =
+            Http.expectJson
+                (defaultErrorHandler (EditorMsgWrapper << GotAnalysePosition))
+                decodeAnalysisReport
         }
 
 
