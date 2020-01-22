@@ -84,7 +84,11 @@ type alias LoginPageData =
     }
 
 
-{-| Represents the possible
+{-| Represents the possible save states a persisted object can have.
+
+TODO: Add "Currently Saving", with and without id, then update saveStateStored
+and saveStateModify accordingly
+
 -}
 type SaveState
     = SaveIsCurrent Int
@@ -109,7 +113,7 @@ saveStateModify old =
 
 
 saveStateStored : Int -> SaveState -> SaveState
-saveStateStored newId saveState =
+saveStateStored newId _ =
     SaveIsCurrent newId
 
 
@@ -1807,7 +1811,7 @@ renderer taco =
     , italic = \content -> Element.row [ Font.italic ] [ Element.text content ]
     , code = code
     , link =
-        \{ title, destination } body ->
+        \{ destination } body ->
             Element.newTabLink
                 [ Element.htmlAttribute (Html.Attributes.style "display" "inline-flex") ]
                 { url = destination
@@ -1900,7 +1904,7 @@ loginUi taco loginPageData =
 
 
 loginDialog : Taco -> LoginPageData -> Element GlobalMsg
-loginDialog taco loginPageData =
+loginDialog _ loginPageData =
     Element.column []
         [ Input.username []
             { label = Input.labelAbove [] (Element.text "Username")

@@ -100,8 +100,8 @@ tileFlat (Tile x y) =
 {-| Converts a Paco Ŝako position into a human readable version that can be
 copied and stored in a text file.
 -}
-abstractExchangeNotation : { lineSeparator : String } -> List PacoPiece -> String
-abstractExchangeNotation config pieces =
+abstractExchangeNotation : String -> List PacoPiece -> String
+abstractExchangeNotation lineSeparator pieces =
     let
         dictRepresentation =
             pacoPositionAsGrid pieces
@@ -129,7 +129,7 @@ abstractExchangeNotation config pieces =
     in
     indices
         |> List.map markdownRow
-        |> String.join config.lineSeparator
+        |> String.join lineSeparator
 
 
 {-| Given a list of Paco Ŝako Pieces (type, color, position), this function
@@ -148,7 +148,7 @@ Here is an example:
 -}
 exportExchangeNotation : List PacoPiece -> String
 exportExchangeNotation pieces =
-    abstractExchangeNotation { lineSeparator = "\n" } pieces
+    abstractExchangeNotation "\n" pieces
 
 
 type TileState
