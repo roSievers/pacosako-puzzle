@@ -3,8 +3,7 @@ module Main exposing (main)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
-import Dict exposing (Dict)
-import Element exposing (Element, centerX, centerY, el, fill, fillPortion, height, padding, row, spacing, text, width)
+import Element exposing (Element, centerX, centerY, fill, fillPortion, height, padding, spacing, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
@@ -25,12 +24,11 @@ import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
 import Markdown.Parser
-import Parser exposing ((|.), (|=), Parser)
 import Pieces
 import Pivot as P exposing (Pivot)
 import Ports
 import RemoteData exposing (WebData)
-import Sako
+import Sako exposing (PacoPiece, Tile(..), tileX, tileY)
 import StaticText
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -169,35 +167,9 @@ type alias PacoPosition =
     }
 
 
-type alias PacoPiece =
-    { pieceType : Sako.Type
-    , color : Sako.Color
-    , position : Tile
-    }
-
-
-{-| Represents a single board tile. `Tile x y` stores two integers with legal values between 0
-and 7 (inclusive). Use `tileX` and `tileY` to extract individual coordinates.
--}
-type Tile
-    = Tile Int Int
-
-
-tileX : Tile -> Int
-tileX (Tile x _) =
-    x
-
-
-tileY : Tile -> Int
-tileY (Tile _ y) =
-    y
-
-
-{-| 1d coordinate for a tile. This is just x + 8 \* y
--}
-tileFlat : Tile -> Int
-tileFlat (Tile x y) =
-    x + 8 * y
+pacoPositionFromPieces : List PacoPiece -> PacoPosition
+pacoPositionFromPieces pieces =
+    { emptyPosition | pieces = pieces }
 
 
 {-| Represents a point in the Svg coordinate space. The game board is rendered from 0 to 800 in
@@ -545,12 +517,12 @@ update msg model =
         GetLibrarySuccess content ->
             let
                 examples =
-                    case Parser.run parseLibrary content of
+                    case Sako.importExchangeNotationList content of
                         Err _ ->
                             RemoteData.Failure (Http.BadBody "The examples file is broken")
 
                         Ok positions ->
-                            RemoteData.Success positions
+                            RemoteData.Success (List.map pacoPositionFromPieces positions)
             in
             ( { model | exampleFile = examples }, Cmd.none )
 
@@ -695,13 +667,13 @@ updateEditor msg model =
         UpdateUserPaste pasteContent ->
             let
                 parseInput () =
-                    case Parser.run parsePosition pasteContent of
+                    case Sako.importExchangeNotation pasteContent of
                         Err _ ->
                             -- ParseError (Debug.toString err)
                             ParseError "Error: Make sure your input has the right shape!"
 
                         Ok position ->
-                            ParseSuccess position
+                            ParseSuccess (pacoPositionFromPieces position)
             in
             ( { model
                 | userPaste = pasteContent
@@ -1004,16 +976,16 @@ pageHeader taco currentPage additionalHeader =
 
 yourDataWillNotBeSaved : Element a
 yourDataWillNotBeSaved =
-    el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
+    Element.el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
 
 
 pageHeaderButton : List (Element.Attribute GlobalMsg) -> PageHeaderInfo -> Element GlobalMsg
 pageHeaderButton attributes { currentPage, targetPage, caption } =
     if currentPage == targetPage then
-        el ([ padding 10, Background.color (Element.rgb255 200 200 200) ] ++ attributes) (Element.text caption)
+        Element.el ([ padding 10, Background.color (Element.rgb255 200 200 200) ] ++ attributes) (Element.text caption)
 
     else
-        el ([ padding 10, Events.onClick (OpenPage targetPage) ] ++ attributes) (Element.text caption)
+        Element.el ([ padding 10, Events.onClick (OpenPage targetPage) ] ++ attributes) (Element.text caption)
 
 
 
@@ -1101,8 +1073,9 @@ storedPositionList taco model =
 
 buildPacoPositionFromStoredPosition : StoredPosition -> Maybe PacoPosition
 buildPacoPositionFromStoredPosition storedPosition =
-    Parser.run parsePosition storedPosition.data.notation
+    Sako.importExchangeNotation storedPosition.data.notation
         |> Result.toMaybe
+        |> Maybe.map pacoPositionFromPieces
 
 
 loadPositionPreview : Taco -> PacoPosition -> Element GlobalMsg
@@ -1145,10 +1118,10 @@ saveStateHeader : PacoPosition -> SaveState -> Element GlobalMsg
 saveStateHeader position saveState =
     case saveState of
         SaveIsCurrent id ->
-            el [ padding 10, Font.color (Element.rgb255 150 200 150), Font.bold ] (Element.text <| "Saved. (id=" ++ String.fromInt id ++ ")")
+            Element.el [ padding 10, Font.color (Element.rgb255 150 200 150), Font.bold ] (Element.text <| "Saved. (id=" ++ String.fromInt id ++ ")")
 
         SaveIsModified id ->
-            el
+            Element.el
                 [ padding 10
                 , Font.color (Element.rgb255 200 150 150)
                 , Font.bold
@@ -1157,7 +1130,7 @@ saveStateHeader position saveState =
                 (Element.text <| "Unsaved Changes! (id=" ++ String.fromInt id ++ ")")
 
         SaveDoesNotExist ->
-            el
+            Element.el
                 [ padding 10
                 , Font.color (Element.rgb255 200 150 150)
                 , Font.bold
@@ -1182,8 +1155,8 @@ positionView taco editor position drag =
         ( _, windowHeight ) =
             editor.windowSize
     in
-    el [ width (Element.px windowHeight), height fill, centerX ]
-        (el [ centerX, centerY ]
+    Element.el [ width (Element.px windowHeight), height fill, centerX ]
+        (Element.el [ centerX, centerY ]
             (Element.html
                 (Html.div
                     [ Mouse.onDown MouseDown
@@ -1414,7 +1387,7 @@ colorPicker msg currentColor newColor =
                 Regular.circle
     in
     -- icon : List (Element.Attribute msg) -> Icon -> Element msg
-    el [ width fill, Events.onClick (msg newColor), padding 5, Background.color (Pieces.colorUi newColor.stroke) ]
+    Element.el [ width fill, Events.onClick (msg newColor), padding 5, Background.color (Pieces.colorUi newColor.stroke) ]
         (icon
             [ centerX
             , Font.color (Pieces.colorUi newColor.fill)
@@ -1716,7 +1689,7 @@ markdownCopyPaste taco model =
         [ Element.text "Text notation you can store"
         , Input.multiline [ Font.family [ Font.monospace ] ]
             { onChange = \_ -> NoOp
-            , text = markdownExchangeNotation (P.getC model.game).pieces
+            , text = Sako.exportExchangeNotation (P.getC model.game).pieces
             , placeholder = Nothing
             , label = Input.labelHidden "Copy this to a text document for later use."
             , spellcheck = False
@@ -1756,265 +1729,6 @@ parsedMarkdownPaste taco model =
                     )
                 , Element.text "Load"
                 ]
-
-
-
---------------------------------------------------------------------------------
--- Exchange notation parsing and serialization ---------------------------------
---------------------------------------------------------------------------------
-
-
-{-| Converts a Paco Ŝako position into a human readable version that can be
-copied and stored in a text file.
--}
-abstractExchangeNotation : { lineSeparator : String } -> List PacoPiece -> String
-abstractExchangeNotation config pieces =
-    let
-        dictRepresentation =
-            pacoPositionAsGrid pieces
-
-        tileEntry : Int -> String
-        tileEntry i =
-            Dict.get i dictRepresentation
-                |> Maybe.withDefault EmptyTile
-                |> tileStateAsString
-
-        markdownRow : List Int -> String
-        markdownRow indexRow =
-            String.join " " (List.map tileEntry indexRow)
-
-        indices =
-            [ [ 56, 57, 58, 59, 60, 61, 62, 63 ]
-            , [ 48, 49, 50, 51, 52, 53, 54, 55 ]
-            , [ 40, 41, 42, 43, 44, 45, 46, 47 ]
-            , [ 32, 33, 34, 35, 36, 37, 38, 39 ]
-            , [ 24, 25, 26, 27, 28, 29, 30, 31 ]
-            , [ 16, 17, 18, 19, 20, 21, 22, 23 ]
-            , [ 8, 9, 10, 11, 12, 13, 14, 15 ]
-            , [ 0, 1, 2, 3, 4, 5, 6, 7 ]
-            ]
-    in
-    indices
-        |> List.map markdownRow
-        |> String.join config.lineSeparator
-
-
-markdownExchangeNotation : List PacoPiece -> String
-markdownExchangeNotation pieces =
-    abstractExchangeNotation { lineSeparator = "\n" } pieces
-
-
-type TileState
-    = EmptyTile
-    | WhiteTile Sako.Type
-    | BlackTile Sako.Type
-    | PairTile Sako.Type Sako.Type
-
-
-{-| Converts a PacoPosition into a map from 1d tile indices to tile states
--}
-pacoPositionAsGrid : List PacoPiece -> Dict Int TileState
-pacoPositionAsGrid pieces =
-    let
-        colorTiles filterColor =
-            pieces
-                |> List.filter (\piece -> piece.color == filterColor)
-                |> List.map (\piece -> ( tileFlat piece.position, piece.pieceType ))
-                |> Dict.fromList
-    in
-    Dict.merge
-        (\i w dict -> Dict.insert i (WhiteTile w) dict)
-        (\i w b dict -> Dict.insert i (PairTile w b) dict)
-        (\i b dict -> Dict.insert i (BlackTile b) dict)
-        (colorTiles Sako.White)
-        (colorTiles Sako.Black)
-        Dict.empty
-
-
-gridAsPacoPosition : List (List TileState) -> PacoPosition
-gridAsPacoPosition tiles =
-    { moveNumber = 0
-    , pieces =
-        indexedMapNest2 tileAsPacoPiece tiles
-            |> List.concat
-            |> List.concat
-    }
-
-
-tileAsPacoPiece : Int -> Int -> TileState -> List PacoPiece
-tileAsPacoPiece row col tile =
-    let
-        position =
-            Tile col (7 - row)
-    in
-    case tile of
-        EmptyTile ->
-            []
-
-        WhiteTile w ->
-            [ { pieceType = w, color = Sako.White, position = position } ]
-
-        BlackTile b ->
-            [ { pieceType = b, color = Sako.Black, position = position } ]
-
-        PairTile w b ->
-            [ { pieceType = w, color = Sako.White, position = position }
-            , { pieceType = b, color = Sako.Black, position = position }
-            ]
-
-
-indexedMapNest2 : (Int -> Int -> a -> b) -> List (List a) -> List (List b)
-indexedMapNest2 f ls =
-    List.indexedMap
-        (\i xs ->
-            List.indexedMap (\j x -> f i j x) xs
-        )
-        ls
-
-
-tileStateAsString : TileState -> String
-tileStateAsString tileState =
-    case tileState of
-        EmptyTile ->
-            ".."
-
-        WhiteTile w ->
-            markdownTypeChar w ++ "."
-
-        BlackTile b ->
-            "." ++ markdownTypeChar b
-
-        PairTile w b ->
-            markdownTypeChar w ++ markdownTypeChar b
-
-
-markdownTypeChar : Sako.Type -> String
-markdownTypeChar pieceType =
-    case pieceType of
-        Sako.Pawn ->
-            "P"
-
-        Sako.Rock ->
-            "R"
-
-        Sako.Knight ->
-            "N"
-
-        Sako.Bishop ->
-            "B"
-
-        Sako.Queen ->
-            "Q"
-
-        Sako.King ->
-            "K"
-
-
-{-| Parser that converts a single letter into the corresponding sako type.
--}
-parseTypeChar : Parser (Maybe Sako.Type)
-parseTypeChar =
-    Parser.oneOf
-        [ Parser.succeed (Just Sako.Pawn) |. Parser.symbol "P"
-        , Parser.succeed (Just Sako.Rock) |. Parser.symbol "R"
-        , Parser.succeed (Just Sako.Knight) |. Parser.symbol "N"
-        , Parser.succeed (Just Sako.Bishop) |. Parser.symbol "B"
-        , Parser.succeed (Just Sako.Queen) |. Parser.symbol "Q"
-        , Parser.succeed (Just Sako.King) |. Parser.symbol "K"
-        , Parser.succeed Nothing |. Parser.symbol "."
-        ]
-
-
-{-| Parser that converts a pair like ".P", "BQ", ".." into a TileState.
--}
-parseTile : Parser TileState
-parseTile =
-    Parser.succeed tileFromMaybe
-        |= parseTypeChar
-        |= parseTypeChar
-
-
-tileFromMaybe : Maybe Sako.Type -> Maybe Sako.Type -> TileState
-tileFromMaybe white black =
-    case ( white, black ) of
-        ( Nothing, Nothing ) ->
-            EmptyTile
-
-        ( Just w, Nothing ) ->
-            WhiteTile w
-
-        ( Nothing, Just b ) ->
-            BlackTile b
-
-        ( Just w, Just b ) ->
-            PairTile w b
-
-
-parseRow : Parser (List TileState)
-parseRow =
-    sepBy parseTile (Parser.symbol " ")
-        |> Parser.andThen parseLengthEightCheck
-
-
-parseGrid : Parser (List (List TileState))
-parseGrid =
-    sepBy parseRow linebreak
-        |> Parser.andThen parseLengthEightCheck
-
-
-parsePosition : Parser PacoPosition
-parsePosition =
-    parseGrid
-        |> Parser.map gridAsPacoPosition
-
-
-{-| A library is a list of PacoPositions separated by a newline.
-Deprecated: In the future the examples won't come from a file, instead it will
-be read from the server in a json where each position data has a separate
-field anyway. Then this function won't be needed anymore.
--}
-parseLibrary : Parser (List PacoPosition)
-parseLibrary =
-    sepBy parsePosition (Parser.symbol "-" |. linebreak)
-
-
-linebreak : Parser ()
-linebreak =
-    Parser.chompWhile (\c -> c == '\n' || c == '\u{000D}')
-
-
-{-| Parse a string with many tiles and return them as a list. When we encounter
-".B " with a trailing space, then we know that more tiles must follow.
-If there is no trailing space, we return.
--}
-parseLengthEightCheck : List a -> Parser (List a)
-parseLengthEightCheck list =
-    if List.length list == 8 then
-        Parser.succeed list
-
-    else
-        Parser.problem "There must be 8 columns in each row."
-
-
-{-| Using `sepBy content separator` you can parse zero or more occurrences of
-the `content`, separated by `separator`.
-
-Returns a list of values returned by `content`.
-
--}
-sepBy : Parser a -> Parser () -> Parser (List a)
-sepBy content separator =
-    let
-        helper ls =
-            Parser.oneOf
-                [ Parser.succeed (\tile -> Parser.Loop (tile :: ls))
-                    |= content
-                    |. Parser.oneOf [ separator, Parser.succeed () ]
-                , Parser.succeed (Parser.Done ls)
-                ]
-    in
-    Parser.loop [] helper
-        |> Parser.map List.reverse
 
 
 
@@ -2062,14 +1776,16 @@ markdownView taco content =
 
 codeBlock : Taco -> { body : String, language : Maybe String } -> Element GlobalMsg
 codeBlock taco details =
-    case Parser.run parseLibrary details.body of
+    case Sako.importExchangeNotationList details.body of
         Err _ ->
             Element.text "There is an error in the position notation :-("
 
         Ok positions ->
             let
                 positionPreviews =
-                    List.map (loadPositionPreview taco) positions
+                    positions
+                        |> List.map pacoPositionFromPieces
+                        |> List.map (loadPositionPreview taco)
 
                 rows =
                     List.greedyGroupsOf 3 positionPreviews
@@ -2323,7 +2039,7 @@ encodeCreatePosition position =
     Encode.object
         [ ( "data"
           , encodeCreatePositionData
-                { notation = markdownExchangeNotation position.pieces
+                { notation = Sako.exportExchangeNotation position.pieces
                 }
           )
         ]
