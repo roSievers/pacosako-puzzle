@@ -6,7 +6,6 @@ import Browser.Events
 import Element exposing (Element, centerX, centerY, fill, fillPortion, height, padding, spacing, width)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region
@@ -1011,11 +1010,20 @@ yourDataWillNotBeSaved =
 
 pageHeaderButton : List (Element.Attribute GlobalMsg) -> PageHeaderInfo -> Element GlobalMsg
 pageHeaderButton attributes { currentPage, targetPage, caption } =
-    if currentPage == targetPage then
-        Element.el ([ padding 10, Background.color (Element.rgb255 200 200 200) ] ++ attributes) (Element.text caption)
+    Input.button
+        (padding 10
+            :: (backgroundFocus (currentPage == targetPage)
+                    ++ attributes
+               )
+        )
+        { onPress =
+            if currentPage == targetPage then
+                Nothing
 
-    else
-        Element.el ([ padding 10, Events.onClick (OpenPage targetPage) ] ++ attributes) (Element.text caption)
+            else
+                Just (OpenPage targetPage)
+        , label = Element.text caption
+        }
 
 
 
@@ -1110,19 +1118,21 @@ buildPacoPositionFromStoredPosition storedPosition =
 
 loadPositionPreview : Taco -> PacoPosition -> Element GlobalMsg
 loadPositionPreview taco position =
-    Element.el [ Events.onClick (LoadIntoEditor position) ]
-        (Element.html
-            (positionSvg
-                { position = position
-                , colorScheme = taco.colorScheme
-                , sideLength = 250
-                , drag = DragOff
-                , viewMode = CleanBoard
-                , nodeId = Nothing
-                }
-            )
-            |> Element.map EditorMsgWrapper
-        )
+    Input.button []
+        { onPress = Just (LoadIntoEditor position)
+        , label =
+            Element.html
+                (positionSvg
+                    { position = position
+                    , colorScheme = taco.colorScheme
+                    , sideLength = 250
+                    , drag = DragOff
+                    , viewMode = CleanBoard
+                    , nodeId = Nothing
+                    }
+                )
+                |> Element.map EditorMsgWrapper
+        }
 
 
 
@@ -1151,22 +1161,24 @@ saveStateHeader position saveState =
             Element.el [ padding 10, Font.color (Element.rgb255 150 200 150), Font.bold ] (Element.text <| "Saved. (id=" ++ String.fromInt id ++ ")")
 
         SaveIsModified id ->
-            Element.el
+            Input.button
                 [ padding 10
                 , Font.color (Element.rgb255 200 150 150)
                 , Font.bold
-                , Events.onClick (EditorMsgWrapper (SavePosition position saveState))
                 ]
-                (Element.text <| "Unsaved Changes! (id=" ++ String.fromInt id ++ ")")
+                { onPress = Just (EditorMsgWrapper (SavePosition position saveState))
+                , label = Element.text <| "Unsaved Changes! (id=" ++ String.fromInt id ++ ")"
+                }
 
         SaveDoesNotExist ->
-            Element.el
+            Input.button
                 [ padding 10
                 , Font.color (Element.rgb255 200 150 150)
                 , Font.bold
-                , Events.onClick (EditorMsgWrapper (SavePosition position saveState))
                 ]
-                (Element.text "Unsaved Changes!")
+                { onPress = Just (EditorMsgWrapper (SavePosition position saveState))
+                , label = Element.text "Unsaved Changes!"
+                }
 
         SaveNotRequired ->
             Element.none
@@ -1221,8 +1233,8 @@ sidebar taco model =
         , toolConfig model |> Element.map EditorMsgWrapper
         , colorSchemeConfig taco
         , viewModeConfig model
-        , Element.el [ Events.onClick DownloadSvg ] (Element.text "Download as Svg") |> Element.map EditorMsgWrapper
-        , Element.el [ Events.onClick DownloadPng ] (Element.text "Download as Png") |> Element.map EditorMsgWrapper
+        , Input.button [] { onPress = Just (EditorMsgWrapper DownloadSvg), label = Element.text "Download as Svg" }
+        , Input.button [] { onPress = Just (EditorMsgWrapper DownloadPng), label = Element.text "Download as Png" }
         , markdownCopyPaste taco model |> Element.map EditorMsgWrapper
         , analysisResult model
         ]
@@ -1324,50 +1336,62 @@ toolConfig editor =
 
 moveToolButton : EditorTool -> Element Msg
 moveToolButton tool =
-    Element.row
-        [ width (fillPortion 1)
-        , spacing 5
-        , padding 5
-        , Border.color (Element.rgb255 0 0 0)
-        , Border.width 1
-        , backgroundFocus (tool == MoveTool)
-        , Events.onClick (ToolSelect MoveTool)
-        ]
-        [ icon [] Solid.arrowsAlt
-        , Element.text "Move Piece"
-        ]
+    Input.button []
+        { onPress = Just (ToolSelect MoveTool)
+        , label =
+            Element.row
+                ([ width (fillPortion 1)
+                 , spacing 5
+                 , padding 5
+                 , Border.color (Element.rgb255 0 0 0)
+                 , Border.width 1
+                 ]
+                    ++ backgroundFocus (tool == MoveTool)
+                )
+                [ icon [] Solid.arrowsAlt
+                , Element.text "Move Piece"
+                ]
+        }
 
 
 deleteToolButton : EditorTool -> Element Msg
 deleteToolButton tool =
-    Element.row
-        [ width (fillPortion 1)
-        , spacing 5
-        , padding 5
-        , Border.color (Element.rgb255 0 0 0)
-        , Border.width 1
-        , backgroundFocus (tool == DeleteTool)
-        , Events.onClick (ToolSelect DeleteTool)
-        ]
-        [ icon [] Solid.trash
-        , Element.text "Delete Piece"
-        ]
+    Input.button []
+        { onPress = Just (ToolSelect DeleteTool)
+        , label =
+            Element.row
+                ([ width (fillPortion 1)
+                 , spacing 5
+                 , padding 5
+                 , Border.color (Element.rgb255 0 0 0)
+                 , Border.width 1
+                 ]
+                    ++ backgroundFocus (tool == DeleteTool)
+                )
+                [ icon [] Solid.trash
+                , Element.text "Delete Piece"
+                ]
+        }
 
 
 createToolButton : EditorTool -> Element Msg
 createToolButton tool =
-    Element.row
-        [ width (fillPortion 1)
-        , spacing 5
-        , padding 5
-        , Border.color (Element.rgb255 0 0 0)
-        , Border.width 1
-        , backgroundFocus (tool == CreateTool)
-        , Events.onClick (ToolSelect CreateTool)
-        ]
-        [ icon [] Solid.chess
-        , Element.text "Add Piece"
-        ]
+    Input.button []
+        { onPress = Just (ToolSelect CreateTool)
+        , label =
+            Element.row
+                ([ width (fillPortion 1)
+                 , spacing 5
+                 , padding 5
+                 , Border.color (Element.rgb255 0 0 0)
+                 , Border.width 1
+                 ]
+                    ++ backgroundFocus (tool == CreateTool)
+                )
+                [ icon [] Solid.chess
+                , Element.text "Add Piece"
+                ]
+        }
 
 
 createToolConfig : Editor -> Element Msg
@@ -1388,13 +1412,13 @@ createToolConfig model =
         ]
 
 
-backgroundFocus : Bool -> Element.Attribute msg
+backgroundFocus : Bool -> List (Element.Attribute msg)
 backgroundFocus isFocused =
     if isFocused then
-        Background.color (Element.rgb255 200 200 200)
+        [ Background.color (Element.rgb255 200 200 200) ]
 
     else
-        Background.color (Element.rgb255 255 255 255)
+        []
 
 
 {-| A toolConfigOption represents one of several possible choices. If it represents the currently
@@ -1402,12 +1426,14 @@ choosen value (single selection only) it is highlighted. When clicked it will se
 -}
 toolConfigOption : a -> (a -> msg) -> a -> String -> Element msg
 toolConfigOption currentValue msg buttonValue caption =
-    Element.el
-        [ Events.onClick (msg buttonValue)
-        , backgroundFocus (currentValue == buttonValue)
-        , padding 5
-        ]
-        (Element.text caption)
+    Input.button
+        (padding 5
+            :: backgroundFocus (currentValue == buttonValue)
+        )
+        { onPress = Just (msg buttonValue)
+        , label =
+            Element.text caption
+        }
 
 
 colorConfig : Maybe Sako.Color -> (Maybe Sako.Color -> msg) -> Element msg
@@ -1429,14 +1455,15 @@ colorPicker msg currentColor newColor =
             else
                 Regular.circle
     in
-    -- icon : List (Element.Attribute msg) -> Icon -> Element msg
-    Element.el [ width fill, Events.onClick (msg newColor), padding 5, Background.color (Pieces.colorUi newColor.stroke) ]
-        (icon
-            [ centerX
-            , Font.color (Pieces.colorUi newColor.fill)
-            ]
-            iconChoice
-        )
+    Input.button [ width fill, padding 5, Background.color (Pieces.colorUi newColor.stroke) ]
+        { onPress = Just (msg newColor)
+        , label =
+            icon
+                [ centerX
+                , Font.color (Pieces.colorUi newColor.fill)
+                ]
+                iconChoice
+        }
 
 
 colorSchemeConfig : Taco -> Element GlobalMsg
@@ -1759,19 +1786,23 @@ parsedMarkdownPaste taco model =
             Element.text error
 
         ParseSuccess pacoPosition ->
-            Element.row [ Events.onClick (UseUserPaste pacoPosition), spacing 5 ]
-                [ Element.html
-                    (positionSvg
-                        { position = pacoPosition
-                        , colorScheme = taco.colorScheme
-                        , sideLength = 100
-                        , drag = DragOff
-                        , viewMode = CleanBoard
-                        , nodeId = Nothing
-                        }
-                    )
-                , Element.text "Load"
-                ]
+            Input.button []
+                { onPress = Just (UseUserPaste pacoPosition)
+                , label =
+                    Element.row [ spacing 5 ]
+                        [ Element.html
+                            (positionSvg
+                                { position = pacoPosition
+                                , colorScheme = taco.colorScheme
+                                , sideLength = 100
+                                , drag = DragOff
+                                , viewMode = CleanBoard
+                                , nodeId = Nothing
+                                }
+                            )
+                        , Element.text "Load"
+                        ]
+                }
 
 
 analysisResult : Editor -> Element msg
@@ -1994,7 +2025,8 @@ loginHeaderInfo taco =
                 Nothing ->
                     Element.row [ padding 10, spacing 10 ] [ icon [] Solid.signInAlt, Element.text "Login" ]
     in
-    Element.el [ Element.alignRight, Events.onClick (OpenPage LoginPage) ] loginCaption
+    Input.button [ Element.alignRight ]
+        { onPress = Just (OpenPage LoginPage), label = loginCaption }
 
 
 
