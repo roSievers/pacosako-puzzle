@@ -147,7 +147,52 @@ type alias EditorModel =
     , viewMode : ViewMode
     , analysis : Maybe AnalysisReport
     , rect : Rect
+    , smartTool : SmartToolModel
     }
+
+
+type alias SmartToolModel =
+    { highlight : Maybe Tile
+    , hover : Maybe Tile
+    }
+
+
+initSmartTool : SmartToolModel
+initSmartTool =
+    { highlight = Nothing
+    , hover = Nothing
+    }
+
+
+type ToolInputMsg
+    = ToolClick Tile
+    | ToolDeselect
+    | ToolHover (Maybe Tile)
+
+
+type BoardDecoration
+    = HighlightTile Tile
+    | DropTarget Tile
+
+
+getHighlightTile : BoardDecoration -> Maybe Tile
+getHighlightTile decoration =
+    case decoration of
+        HighlightTile tile ->
+            Just tile
+
+        _ ->
+            Nothing
+
+
+getDropTarget : BoardDecoration -> Maybe Tile
+getDropTarget decoration =
+    case decoration of
+        DropTarget tile ->
+            Just tile
+
+        _ ->
+            Nothing
 
 
 type alias BlogModel =
@@ -164,6 +209,7 @@ type EditorTool
     = MoveTool
     | DeleteTool
     | CreateTool
+    | SmartTool
 
 
 type alias PacoPosition =
@@ -225,19 +271,6 @@ startDrag rect event =
         }
 
 
-moveDrag : Rect -> Mouse.Event -> DragState -> DragState
-moveDrag rect event drag =
-    case drag of
-        DragOff ->
-            DragOff
-
-        Dragging { start } ->
-            Dragging
-                { start = start
-                , current = gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
-                }
-
-
 relativeInside : Rect -> ( Float, Float ) -> ( Float, Float )
 relativeInside rect ( x, y ) =
     ( (x - rect.x) / rect.width, (y - rect.y) / rect.height )
@@ -265,10 +298,23 @@ gameSpaceCoordinate elementRect gameView coord =
 
 
 {-| Transforms an Svg coordinate into a logical tile coordinate.
+DEPRECATED, due to bad behaviour outside the board
 -}
 tileCoordinate : SvgCoord -> Tile
 tileCoordinate (SvgCoord x y) =
     Tile (x // 100) (7 - y // 100)
+
+
+{-| Transforms an Svg coordinate into a logical tile coordinte.
+Returns Nothing, if the SvgCoordinate is outside the board.
+-}
+safeTileCoordinate : SvgCoord -> Maybe Tile
+safeTileCoordinate (SvgCoord x y) =
+    if 0 <= x && x < 800 && 0 <= y && y < 800 then
+        Just (Tile (x // 100) (7 - y // 100))
+
+    else
+        Nothing
 
 
 type alias Rect =
@@ -368,7 +414,7 @@ initialEditor flags =
     , game = P.singleton initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
-    , tool = MoveTool
+    , tool = SmartTool
     , moveToolColor = Nothing
     , deleteToolColor = Nothing
     , createToolColor = Sako.White
@@ -383,6 +429,7 @@ initialEditor flags =
         , width = 1
         , height = 1
         }
+    , smartTool = initSmartTool
     }
 
 
@@ -571,7 +618,7 @@ updateEditor msg model =
             )
 
         MouseMove event ->
-            ( { model | drag = moveDrag model.rect event model.drag }, Cmd.none )
+            handleMouseMove event model
 
         MouseUp event ->
             let
@@ -764,6 +811,92 @@ clickRelease down up model =
 
         CreateTool ->
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
+
+        SmartTool ->
+            if safeTileCoordinate down == safeTileCoordinate up then
+                case safeTileCoordinate up of
+                    Just clickedTileCoordinate ->
+                        ( { model
+                            | smartTool = updateSmartTool (ToolClick clickedTileCoordinate) model.smartTool
+                          }
+                        , Cmd.none
+                        )
+
+                    Nothing ->
+                        ( { model
+                            | smartTool = updateSmartTool ToolDeselect model.smartTool
+                          }
+                        , Cmd.none
+                        )
+
+            else
+                ( model, Cmd.none )
+
+
+handleMouseMove : Mouse.Event -> EditorModel -> ( EditorModel, Cmd Msg )
+handleMouseMove event model =
+    case model.drag of
+        -- Moving the mouse when it is not held down.
+        DragOff ->
+            case model.tool of
+                SmartTool ->
+                    let
+                        gameSpacePos =
+                            gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+
+                        newTool =
+                            updateSmartTool (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
+                    in
+                    ( { model | smartTool = newTool }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        --Moving the mouse when it is held down.
+        Dragging { start } ->
+            ( { model
+                | drag =
+                    Dragging
+                        { start = start
+                        , current = gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+                        }
+              }
+            , Cmd.none
+            )
+
+
+moveDrag : Rect -> Mouse.Event -> DragState -> DragState
+moveDrag rect event drag =
+    case drag of
+        DragOff ->
+            DragOff
+
+        Dragging { start } ->
+            Dragging
+                { start = start
+                , current = gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
+                }
+
+
+updateSmartTool : ToolInputMsg -> SmartToolModel -> SmartToolModel
+updateSmartTool msg model =
+    case msg of
+        ToolClick tile ->
+            if model.highlight == Just tile then
+                { model | highlight = Nothing }
+
+            else
+                { model | highlight = Just tile }
+
+        ToolHover maybeTile ->
+            if model.highlight == maybeTile || model.highlight == Nothing then
+                { model | hover = Nothing }
+
+            else
+                { model | hover = maybeTile }
+
+        ToolDeselect ->
+            { model | highlight = Nothing }
 
 
 deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -1105,6 +1238,7 @@ loadPositionPreview taco position =
                     , drag = DragOff
                     , viewMode = CleanBoard
                     , nodeId = Nothing
+                    , decoration = []
                     }
                 )
                 |> Element.map EditorMsgWrapper
@@ -1189,11 +1323,24 @@ positionView taco editor position drag =
                         , drag = drag
                         , viewMode = editor.viewMode
                         , nodeId = Just sakoEditorId
+                        , decoration = toolDecoration editor
                         }
                     ]
                 )
             )
         )
+
+
+toolDecoration : EditorModel -> List BoardDecoration
+toolDecoration model =
+    if model.tool == SmartTool then
+        [ model.smartTool.highlight |> Maybe.map HighlightTile
+        , model.smartTool.hover |> Maybe.map DropTarget
+        ]
+            |> List.filterMap identity
+
+    else
+        []
 
 
 
@@ -1307,6 +1454,7 @@ toolConfig editor =
 
           else
             Element.none
+        , smartToolButton editor.tool
         ]
 
 
@@ -1366,6 +1514,26 @@ createToolButton tool =
                 )
                 [ icon [] Solid.chess
                 , Element.text "Add Piece"
+                ]
+        }
+
+
+smartToolButton : EditorTool -> Element EditorMsg
+smartToolButton tool =
+    Input.button []
+        { onPress = Just (ToolSelect SmartTool)
+        , label =
+            Element.row
+                ([ width (fillPortion 1)
+                 , spacing 5
+                 , padding 5
+                 , Border.color (Element.rgb255 0 0 0)
+                 , Border.width 1
+                 ]
+                    ++ backgroundFocus (tool == SmartTool)
+                )
+                [ icon [] Solid.tools
+                , Element.text "Smart Tool"
                 ]
         }
 
@@ -1563,6 +1731,7 @@ positionSvg :
     , drag : DragState
     , viewMode : ViewMode
     , nodeId : Maybe String
+    , decoration : List BoardDecoration
     }
     -> Html EditorMsg
 positionSvg config =
@@ -1584,9 +1753,48 @@ positionSvg config =
     in
     Svg.svg attributes
         [ board config.viewMode
+        , highlightLayer config.decoration
+        , dropTargetLayer config.decoration
         , dragHints config.drag
         , piecesSvg config.colorScheme config.position
         ]
+
+
+highlightLayer : List BoardDecoration -> Svg a
+highlightLayer decorations =
+    decorations
+        |> List.filterMap getHighlightTile
+        |> List.map highlightSvg
+        |> Svg.g []
+
+
+highlightSvg : Tile -> Svg a
+highlightSvg tile =
+    Svg.path
+        [ tileTransform tile
+        , Svg.Attributes.d "m 0 0 v 100 h 100 v -100 z"
+        , Svg.Attributes.fill "rgb(255, 255, 100)"
+        ]
+        []
+
+
+dropTargetLayer : List BoardDecoration -> Svg a
+dropTargetLayer decorations =
+    decorations
+        |> List.filterMap getDropTarget
+        |> List.map dropTargetSvg
+        |> Svg.g []
+
+
+dropTargetSvg : Tile -> Svg a
+dropTargetSvg (Tile x y) =
+    Svg.circle
+        [ Svg.Attributes.r "20"
+        , Svg.Attributes.cx (String.fromInt (100 * x + 50))
+        , Svg.Attributes.cy (String.fromInt (700 - 100 * y + 50))
+        , Svg.Attributes.fill "rgb(200, 200, 200)"
+        ]
+        []
 
 
 piecesSvg : Pieces.ColorScheme -> PacoPosition -> Svg msg
@@ -1608,19 +1816,20 @@ sortBlacksFirst pieces =
 
 pieceSvg : Pieces.ColorScheme -> PacoPiece -> Svg msg
 pieceSvg colorScheme piece =
-    let
-        transform =
-            Svg.Attributes.transform
-                ("translate("
-                    ++ String.fromInt (100 * tileX piece.position)
-                    ++ ", "
-                    ++ String.fromInt (700 - 100 * tileY piece.position)
-                    ++ ")"
-                )
-    in
-    Svg.g [ transform ]
+    Svg.g [ tileTransform piece.position ]
         [ Pieces.figure colorScheme piece.pieceType piece.color
         ]
+
+
+tileTransform : Tile -> Svg.Attribute a
+tileTransform (Tile x y) =
+    Svg.Attributes.transform
+        ("translate("
+            ++ String.fromInt (100 * x)
+            ++ ", "
+            ++ String.fromInt (700 - 100 * y)
+            ++ ")"
+        )
 
 
 board : ViewMode -> Svg msg
@@ -1774,6 +1983,7 @@ parsedMarkdownPaste taco model =
                                 , drag = DragOff
                                 , viewMode = CleanBoard
                                 , nodeId = Nothing
+                                , decoration = []
                                 }
                             )
                         , Element.text "Load"
