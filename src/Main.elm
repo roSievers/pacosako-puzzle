@@ -34,7 +34,7 @@ import Svg.Attributes
 import Task
 
 
-main : Program Decode.Value Model GlobalMsg
+main : Program Decode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -47,9 +47,9 @@ main =
 type alias Model =
     { taco : Taco
     , page : Page
-    , editor : Editor
-    , blog : Blog
-    , login : LoginPageData
+    , editor : EditorModel
+    , blog : BlogModel
+    , login : LoginModel
 
     -- LibraryPage
     , exampleFile : WebData (List PacoPosition)
@@ -77,7 +77,7 @@ type alias Taco =
     }
 
 
-type alias LoginPageData =
+type alias LoginModel =
     { usernameRaw : String
     , passwordRaw : String
     }
@@ -132,7 +132,7 @@ saveStateId saveState =
             Nothing
 
 
-type alias Editor =
+type alias EditorModel =
     { saveState : SaveState
     , game : Pivot PacoPosition
     , drag : DragState
@@ -149,7 +149,7 @@ type alias Editor =
     }
 
 
-type alias Blog =
+type alias BlogModel =
     { text : String }
 
 
@@ -318,11 +318,11 @@ type alias Rect =
     }
 
 
-type GlobalMsg
+type Msg
     = GlobalNoOp
-    | EditorMsgWrapper Msg
+    | EditorMsgWrapper EditorMsg
     | BlogMsgWrapper BlogEditorMsg
-    | LoginMsgWrapper LoginPageMsg
+    | LoginPageMsgWrapper LoginPageMsg
     | LoadIntoEditor PacoPosition
     | OpenPage Page
     | WhiteSideColor Pieces.SideColor
@@ -337,8 +337,9 @@ type GlobalMsg
 
 {-| Messages that may only affect data in the position editor page.
 -}
-type Msg
-    = MouseDown Mouse.Event
+type EditorMsg
+    = EditorMsgNoOp
+    | MouseDown Mouse.Event
     | MouseMove Mouse.Event
     | MouseUp Mouse.Event
     | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
@@ -355,7 +356,6 @@ type Msg
     | DownloadSvg
     | DownloadPng
     | SvgReadyForDownload String
-    | NoOp
     | UpdateUserPaste String
     | UseUserPaste PacoPosition
     | SetViewMode ViewMode
@@ -401,7 +401,7 @@ encodeDownloadRequest record =
         ]
 
 
-initialEditor : Decode.Value -> Editor
+initialEditor : Decode.Value -> EditorModel
 initialEditor flags =
     { saveState = SaveNotRequired
     , game = P.singleton initialPosition
@@ -419,12 +419,12 @@ initialEditor flags =
     }
 
 
-initialBlog : Blog
+initialBlog : BlogModel
 initialBlog =
     { text = StaticText.blogEditorExampleText }
 
 
-initialLogin : LoginPageData
+initialLogin : LoginModel
 initialLogin =
     { usernameRaw = "", passwordRaw = "" }
 
@@ -447,7 +447,7 @@ sizeDecoder =
         (Decode.field "height" Decode.int)
 
 
-init : Decode.Value -> ( Model, Cmd GlobalMsg )
+init : Decode.Value -> ( Model, Cmd Msg )
 init flags =
     ( { taco = initialTaco
       , page = MainPage
@@ -467,7 +467,7 @@ init flags =
     )
 
 
-expectLibrary : Result Http.Error String -> GlobalMsg
+expectLibrary : Result Http.Error String -> Msg
 expectLibrary result =
     case result of
         Ok content ->
@@ -477,7 +477,7 @@ expectLibrary result =
             GetLibraryFailure error
 
 
-update : GlobalMsg -> Model -> ( Model, Cmd GlobalMsg )
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         GlobalNoOp ->
@@ -497,7 +497,7 @@ update msg model =
             in
             ( { model | blog = blogEditorModel }, blogEditorCmd )
 
-        LoginMsgWrapper loginPageMsg ->
+        LoginPageMsgWrapper loginPageMsg ->
             let
                 ( loginPageModel, loginPageCmd ) =
                     updateLoginPage loginPageMsg model.login
@@ -583,10 +583,10 @@ removeLoggedInUser taco =
     { taco | login = Nothing }
 
 
-updateEditor : Msg -> Editor -> ( Editor, Cmd GlobalMsg )
+updateEditor : EditorMsg -> EditorModel -> ( EditorModel, Cmd Msg )
 updateEditor msg model =
     case msg of
-        NoOp ->
+        EditorMsgNoOp ->
             ( model, Cmd.none )
 
         -- When we register a mouse down event on the board we read the current board position
@@ -726,7 +726,7 @@ updateEditor msg model =
             ( { model | analysis = Just analysis }, Cmd.none )
 
 
-editorStateModify : Editor -> Editor
+editorStateModify : EditorModel -> EditorModel
 editorStateModify editorModel =
     { editorModel
         | saveState = saveStateModify editorModel.saveState
@@ -734,19 +734,19 @@ editorStateModify editorModel =
     }
 
 
-applyUndo : Editor -> Editor
+applyUndo : EditorModel -> EditorModel
 applyUndo model =
     { model | game = P.withRollback P.goL model.game }
 
 
-applyRedo : Editor -> Editor
+applyRedo : EditorModel -> EditorModel
 applyRedo model =
     { model | game = P.withRollback P.goR model.game }
 
 
 {-| Handles all key presses.
 -}
-keyUp : KeyStroke -> Editor -> ( Editor, Cmd GlobalMsg )
+keyUp : KeyStroke -> EditorModel -> ( EditorModel, Cmd Msg )
 keyUp stroke model =
     if stroke.ctrlKey == True && stroke.altKey == False then
         ctrlKeyUp stroke.key model
@@ -757,7 +757,7 @@ keyUp stroke model =
 
 {-| Handles all ctrl + x shortcuts.
 -}
-ctrlKeyUp : String -> Editor -> ( Editor, Cmd GlobalMsg )
+ctrlKeyUp : String -> EditorModel -> ( EditorModel, Cmd Msg )
 ctrlKeyUp key model =
     case key of
         "z" ->
@@ -777,7 +777,7 @@ They may still need a lower level of history awareness where they can indicate i
 state is meant as a preview or an invalid ephemeral display state that should not be preserved.
 
 -}
-clickRelease : SvgCoord -> SvgCoord -> Editor -> ( Editor, Cmd GlobalMsg )
+clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
 clickRelease down up model =
     case model.tool of
         DeleteTool ->
@@ -790,7 +790,7 @@ clickRelease down up model =
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
 
-deleteToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
+deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 deleteToolRelease down up model =
     let
         oldPosition =
@@ -816,7 +816,7 @@ deleteToolRelease down up model =
         ( model, Cmd.none )
 
 
-moveToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
+moveToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 moveToolRelease down up model =
     let
         oldPosition =
@@ -855,7 +855,7 @@ moveToolRelease down up model =
         ( model, Cmd.none )
 
 
-createToolRelease : Tile -> Tile -> Editor -> ( Editor, Cmd GlobalMsg )
+createToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 createToolRelease down up model =
     let
         oldPosition =
@@ -910,7 +910,7 @@ addHistoryState newState p =
         p |> P.setR [] |> P.appendGoR newState
 
 
-subscriptions : model -> Sub GlobalMsg
+subscriptions : model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Browser.Events.onResize WindowResize
@@ -928,14 +928,14 @@ decodeKeyStroke =
         (Decode.field "altKey" Decode.bool)
 
 
-updateBlogEditor : BlogEditorMsg -> Blog -> ( Blog, Cmd GlobalMsg )
+updateBlogEditor : BlogEditorMsg -> BlogModel -> ( BlogModel, Cmd Msg )
 updateBlogEditor msg blog =
     case msg of
         OnMarkdownInput newText ->
             ( { blog | text = newText }, Cmd.none )
 
 
-updateLoginPage : LoginPageMsg -> LoginPageData -> ( LoginPageData, Cmd GlobalMsg )
+updateLoginPage : LoginPageMsg -> LoginModel -> ( LoginModel, Cmd Msg )
 updateLoginPage msg loginPageModel =
     case msg of
         TypeUsername newText ->
@@ -957,12 +957,12 @@ updateLoginPage msg loginPageModel =
 --------------------------------------------------------------------------------
 
 
-view : Model -> Html GlobalMsg
+view : Model -> Html Msg
 view model =
     Element.layout [] (globalUi model)
 
 
-globalUi : Model -> Element GlobalMsg
+globalUi : Model -> Element Msg
 globalUi model =
     case model.page of
         MainPage ->
@@ -990,7 +990,7 @@ type alias PageHeaderInfo =
 
 {-| Header that is shared by all pages.
 -}
-pageHeader : Taco -> Page -> Element GlobalMsg -> Element GlobalMsg
+pageHeader : Taco -> Page -> Element Msg -> Element Msg
 pageHeader taco currentPage additionalHeader =
     Element.row [ width fill, Background.color (Element.rgb255 230 230 230) ]
         [ pageHeaderButton [ Font.bold ]
@@ -1008,7 +1008,7 @@ yourDataWillNotBeSaved =
     Element.el [ padding 10, Font.color (Element.rgb255 200 150 150), Font.bold ] (Element.text "Your data will not be saved!")
 
 
-pageHeaderButton : List (Element.Attribute GlobalMsg) -> PageHeaderInfo -> Element GlobalMsg
+pageHeaderButton : List (Element.Attribute Msg) -> PageHeaderInfo -> Element Msg
 pageHeaderButton attributes { currentPage, targetPage, caption } =
     Input.button
         (padding 10
@@ -1034,7 +1034,7 @@ pageHeaderButton attributes { currentPage, targetPage, caption } =
 
 {-| The greeting that is shown when you first open the page.
 -}
-mainPageUi : Taco -> Element GlobalMsg
+mainPageUi : Taco -> Element Msg
 mainPageUi taco =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
@@ -1043,7 +1043,7 @@ mainPageUi taco =
         ]
 
 
-greetingText : Taco -> Element GlobalMsg
+greetingText : Taco -> Element Msg
 greetingText taco =
     case markdownView taco StaticText.mainPageGreetingText of
         Ok rendered ->
@@ -1065,7 +1065,7 @@ greetingText taco =
 --------------------------------------------------------------------------------
 
 
-libraryUi : Taco -> Model -> Element GlobalMsg
+libraryUi : Taco -> Model -> Element Msg
 libraryUi taco model =
     Element.column [ spacing 5, width fill ]
         [ Element.html FontAwesome.Styles.css
@@ -1078,7 +1078,7 @@ libraryUi taco model =
         ]
 
 
-examplesList : Taco -> Model -> Element GlobalMsg
+examplesList : Taco -> Model -> Element Msg
 examplesList taco model =
     remoteDataHelper
         { notAsked = Element.text "Examples were never requested."
@@ -1093,7 +1093,7 @@ examplesList taco model =
         model.exampleFile
 
 
-storedPositionList : Taco -> Model -> Element GlobalMsg
+storedPositionList : Taco -> Model -> Element Msg
 storedPositionList taco model =
     remoteDataHelper
         { notAsked = Element.text "Please log in to load stored positions."
@@ -1116,7 +1116,7 @@ buildPacoPositionFromStoredPosition storedPosition =
         |> Maybe.map pacoPositionFromPieces
 
 
-loadPositionPreview : Taco -> PacoPosition -> Element GlobalMsg
+loadPositionPreview : Taco -> PacoPosition -> Element Msg
 loadPositionPreview taco position =
     Input.button []
         { onPress = Just (LoadIntoEditor position)
@@ -1141,7 +1141,7 @@ loadPositionPreview taco position =
 --------------------------------------------------------------------------------
 
 
-editorUi : Taco -> Editor -> Element GlobalMsg
+editorUi : Taco -> EditorModel -> Element Msg
 editorUi taco model =
     Element.column [ width fill, height fill ]
         [ pageHeader taco EditorPage (saveStateHeader (P.getC model.game) model.saveState)
@@ -1154,7 +1154,7 @@ editorUi taco model =
         ]
 
 
-saveStateHeader : PacoPosition -> SaveState -> Element GlobalMsg
+saveStateHeader : PacoPosition -> SaveState -> Element Msg
 saveStateHeader position saveState =
     case saveState of
         SaveIsCurrent id ->
@@ -1191,7 +1191,7 @@ windowSafetyMargin =
     50
 
 
-positionView : Taco -> Editor -> PacoPosition -> DragState -> Element Msg
+positionView : Taco -> EditorModel -> PacoPosition -> DragState -> Element EditorMsg
 positionView taco editor position drag =
     let
         ( _, windowHeight ) =
@@ -1226,7 +1226,7 @@ positionView taco editor position drag =
 --------------------------------------------------------------------------------
 
 
-sidebar : Taco -> Editor -> Element GlobalMsg
+sidebar : Taco -> EditorModel -> Element Msg
 sidebar taco model =
     Element.column [ width (fill |> Element.maximum 400), height fill, spacing 10, padding 10, Element.alignRight ]
         [ sidebarActionButtons model.game |> Element.map EditorMsgWrapper
@@ -1240,7 +1240,7 @@ sidebar taco model =
         ]
 
 
-sidebarActionButtons : Pivot PacoPosition -> Element Msg
+sidebarActionButtons : Pivot PacoPosition -> Element EditorMsg
 sidebarActionButtons p =
     Element.row [ width fill ]
         [ undo p
@@ -1262,7 +1262,7 @@ flatButton onPress content =
 
 {-| The undo button.
 -}
-undo : Pivot a -> Element Msg
+undo : Pivot a -> Element EditorMsg
 undo p =
     if P.hasL p then
         flatButton (Just Undo) (icon [] Solid.arrowLeft)
@@ -1273,7 +1273,7 @@ undo p =
 
 {-| The redo button.
 -}
-redo : Pivot a -> Element Msg
+redo : Pivot a -> Element EditorMsg
 redo p =
     if P.hasR p then
         flatButton (Just Redo) (icon [] Solid.arrowRight)
@@ -1282,7 +1282,7 @@ redo p =
         flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.arrowRight)
 
 
-resetStartingBoard : Pivot PacoPosition -> Element Msg
+resetStartingBoard : Pivot PacoPosition -> Element EditorMsg
 resetStartingBoard p =
     if P.getC p /= initialPosition then
         flatButton (Just (Reset initialPosition)) (icon [] Solid.home)
@@ -1291,7 +1291,7 @@ resetStartingBoard p =
         flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.home)
 
 
-resetClearBoard : Pivot PacoPosition -> Element Msg
+resetClearBoard : Pivot PacoPosition -> Element EditorMsg
 resetClearBoard p =
     if P.getC p /= emptyPosition then
         flatButton (Just (Reset emptyPosition)) (icon [] Solid.broom)
@@ -1300,17 +1300,17 @@ resetClearBoard p =
         flatButton Nothing (icon [ Font.color (Element.rgb255 150 150 150) ] Solid.broom)
 
 
-randomPosition : Element Msg
+randomPosition : Element EditorMsg
 randomPosition =
     flatButton (Just RequestRandomPosition) (icon [] Solid.dice)
 
 
-analysePosition : PacoPosition -> Element Msg
+analysePosition : PacoPosition -> Element EditorMsg
 analysePosition position =
     flatButton (Just (RequestAnalysePosition position)) (icon [] Solid.calculator)
 
 
-toolConfig : Editor -> Element Msg
+toolConfig : EditorModel -> Element EditorMsg
 toolConfig editor =
     Element.column [ width fill ]
         [ moveToolButton editor.tool
@@ -1334,7 +1334,7 @@ toolConfig editor =
         ]
 
 
-moveToolButton : EditorTool -> Element Msg
+moveToolButton : EditorTool -> Element EditorMsg
 moveToolButton tool =
     Input.button []
         { onPress = Just (ToolSelect MoveTool)
@@ -1354,7 +1354,7 @@ moveToolButton tool =
         }
 
 
-deleteToolButton : EditorTool -> Element Msg
+deleteToolButton : EditorTool -> Element EditorMsg
 deleteToolButton tool =
     Input.button []
         { onPress = Just (ToolSelect DeleteTool)
@@ -1374,7 +1374,7 @@ deleteToolButton tool =
         }
 
 
-createToolButton : EditorTool -> Element Msg
+createToolButton : EditorTool -> Element EditorMsg
 createToolButton tool =
     Input.button []
         { onPress = Just (ToolSelect CreateTool)
@@ -1394,7 +1394,7 @@ createToolButton tool =
         }
 
 
-createToolConfig : Editor -> Element Msg
+createToolConfig : EditorModel -> Element EditorMsg
 createToolConfig model =
     Element.column [ width fill ]
         [ Element.row []
@@ -1466,7 +1466,7 @@ colorPicker msg currentColor newColor =
         }
 
 
-colorSchemeConfig : Taco -> Element GlobalMsg
+colorSchemeConfig : Taco -> Element Msg
 colorSchemeConfig taco =
     Element.column [ width fill, spacing 5 ]
         [ Element.text "Piece colors"
@@ -1475,7 +1475,7 @@ colorSchemeConfig taco =
         ]
 
 
-colorSchemeConfigWhite : Taco -> Element GlobalMsg
+colorSchemeConfigWhite : Taco -> Element Msg
 colorSchemeConfigWhite taco =
     Element.row [ width fill ]
         [ colorPicker WhiteSideColor taco.colorScheme.white Pieces.whitePieceColor
@@ -1490,7 +1490,7 @@ colorSchemeConfigWhite taco =
         ]
 
 
-colorSchemeConfigBlack : Taco -> Element GlobalMsg
+colorSchemeConfigBlack : Taco -> Element Msg
 colorSchemeConfigBlack taco =
     Element.wrappedRow [ width fill ]
         [ colorPicker BlackSideColor taco.colorScheme.black Pieces.whitePieceColor
@@ -1505,7 +1505,7 @@ colorSchemeConfigBlack taco =
         ]
 
 
-viewModeConfig : Editor -> Element GlobalMsg
+viewModeConfig : EditorModel -> Element Msg
 viewModeConfig editor =
     Element.wrappedRow [ spacing 5 ]
         [ toolConfigOption editor.viewMode (SetViewMode >> EditorMsgWrapper) ShowNumbers "Show numbers"
@@ -1588,7 +1588,7 @@ positionSvg :
     , viewMode : ViewMode
     , nodeId : Maybe String
     }
-    -> Html Msg
+    -> Html EditorMsg
 positionSvg config =
     let
         idAttribute =
@@ -1753,12 +1753,12 @@ icon attributes iconType =
     Element.el attributes (Element.html (viewIcon iconType))
 
 
-markdownCopyPaste : Taco -> Editor -> Element Msg
+markdownCopyPaste : Taco -> EditorModel -> Element EditorMsg
 markdownCopyPaste taco model =
     Element.column [ spacing 5 ]
         [ Element.text "Text notation you can store"
         , Input.multiline [ Font.family [ Font.monospace ] ]
-            { onChange = \_ -> NoOp
+            { onChange = \_ -> EditorMsgNoOp
             , text = Sako.exportExchangeNotation (P.getC model.game).pieces
             , placeholder = Nothing
             , label = Input.labelHidden "Copy this to a text document for later use."
@@ -1776,7 +1776,7 @@ markdownCopyPaste taco model =
         ]
 
 
-parsedMarkdownPaste : Taco -> Editor -> Element Msg
+parsedMarkdownPaste : Taco -> EditorModel -> Element EditorMsg
 parsedMarkdownPaste taco model =
     case model.pasteParsed of
         NoInput ->
@@ -1805,7 +1805,7 @@ parsedMarkdownPaste taco model =
                 }
 
 
-analysisResult : Editor -> Element msg
+analysisResult : EditorModel -> Element msg
 analysisResult editorModel =
     case editorModel.analysis of
         Just analysis ->
@@ -1823,7 +1823,7 @@ analysisResult editorModel =
 --------------------------------------------------------------------------------
 
 
-blogUi : Taco -> Blog -> Element GlobalMsg
+blogUi : Taco -> BlogModel -> Element Msg
 blogUi taco blog =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
@@ -1852,7 +1852,7 @@ blogUi taco blog =
         ]
 
 
-markdownView : Taco -> String -> Result String (List (Element GlobalMsg))
+markdownView : Taco -> String -> Result String (List (Element Msg))
 markdownView taco content =
     content
         |> Markdown.Parser.parse
@@ -1860,7 +1860,7 @@ markdownView taco content =
         |> Result.andThen (Markdown.Parser.render (renderer taco))
 
 
-codeBlock : Taco -> { body : String, language : Maybe String } -> Element GlobalMsg
+codeBlock : Taco -> { body : String, language : Maybe String } -> Element Msg
 codeBlock taco details =
     case Sako.importExchangeNotationList details.body of
         Err _ ->
@@ -1878,10 +1878,10 @@ codeBlock taco details =
             in
             Element.column [ spacing 10, centerX ]
                 (rows |> List.map (\group -> Element.row [ spacing 10 ] group))
-                |> Element.map (\_ -> EditorMsgWrapper NoOp)
+                |> Element.map (\_ -> EditorMsgWrapper EditorMsgNoOp)
 
 
-renderer : Taco -> Markdown.Parser.Renderer (Element GlobalMsg)
+renderer : Taco -> Markdown.Parser.Renderer (Element Msg)
 renderer taco =
     { heading = heading
     , raw =
@@ -1971,7 +1971,7 @@ code snippet =
 --------------------------------------------------------------------------------
 
 
-loginUi : Taco -> LoginPageData -> Element GlobalMsg
+loginUi : Taco -> LoginModel -> Element Msg
 loginUi taco loginPageData =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
@@ -1985,36 +1985,36 @@ loginUi taco loginPageData =
         ]
 
 
-loginDialog : Taco -> LoginPageData -> Element GlobalMsg
+loginDialog : Taco -> LoginModel -> Element Msg
 loginDialog _ loginPageData =
     Element.column []
         [ Input.username []
             { label = Input.labelAbove [] (Element.text "Username")
-            , onChange = TypeUsername >> LoginMsgWrapper
+            , onChange = TypeUsername >> LoginPageMsgWrapper
             , placeholder = Just (Input.placeholder [] (Element.text "Username"))
             , text = loginPageData.usernameRaw
             }
         , Input.currentPassword []
             { label = Input.labelAbove [] (Element.text "Password")
-            , onChange = TypePassword >> LoginMsgWrapper
+            , onChange = TypePassword >> LoginPageMsgWrapper
             , placeholder = Just (Input.placeholder [] (Element.text "Password"))
             , text = loginPageData.passwordRaw
             , show = False
             }
-        , Input.button [] { label = Element.text "Login", onPress = Just (LoginMsgWrapper TryLogin) }
+        , Input.button [] { label = Element.text "Login", onPress = Just (LoginPageMsgWrapper TryLogin) }
         ]
 
 
-loginInfoPage : User -> Element GlobalMsg
+loginInfoPage : User -> Element Msg
 loginInfoPage user =
     Element.column [ padding 10, spacing 10 ]
         [ Element.text ("Username: " ++ user.username)
         , Element.text ("ID: " ++ String.fromInt user.id)
-        , Input.button [] { label = Element.text "Logout", onPress = Just (LoginMsgWrapper Logout) }
+        , Input.button [] { label = Element.text "Logout", onPress = Just (LoginPageMsgWrapper Logout) }
         ]
 
 
-loginHeaderInfo : Taco -> Element GlobalMsg
+loginHeaderInfo : Taco -> Element Msg
 loginHeaderInfo taco =
     let
         loginCaption =
@@ -2035,7 +2035,7 @@ loginHeaderInfo taco =
 --------------------------------------------------------------------------------
 
 
-defaultErrorHandler : (a -> GlobalMsg) -> Result Http.Error a -> GlobalMsg
+defaultErrorHandler : (a -> Msg) -> Result Http.Error a -> Msg
 defaultErrorHandler happyPath result =
     case result of
         Ok username ->
@@ -2066,7 +2066,7 @@ decodeUser =
         (Decode.field "username" Decode.string)
 
 
-postLoginPassword : LoginData -> Cmd GlobalMsg
+postLoginPassword : LoginData -> Cmd Msg
 postLoginPassword data =
     Http.post
         { url = "/api/login/password"
@@ -2075,7 +2075,7 @@ postLoginPassword data =
         }
 
 
-getCurrentLogin : Cmd GlobalMsg
+getCurrentLogin : Cmd Msg
 getCurrentLogin =
     Http.get
         { url = "/api/user_id"
@@ -2089,7 +2089,7 @@ getCurrentLogin =
         }
 
 
-getLogout : Cmd GlobalMsg
+getLogout : Cmd Msg
 getLogout =
     Http.get
         { url = "/api/logout"
@@ -2097,7 +2097,7 @@ getLogout =
         }
 
 
-postSave : PacoPosition -> SaveState -> Cmd GlobalMsg
+postSave : PacoPosition -> SaveState -> Cmd Msg
 postSave position saveState =
     case saveStateId saveState of
         Just id ->
@@ -2143,7 +2143,7 @@ decodeSavePositionDone =
         (Decode.field "id" Decode.int)
 
 
-postSaveCreate : PacoPosition -> Cmd GlobalMsg
+postSaveCreate : PacoPosition -> Cmd Msg
 postSaveCreate position =
     Http.post
         { url = "/api/position"
@@ -2155,7 +2155,7 @@ postSaveCreate position =
         }
 
 
-postSaveUpdate : PacoPosition -> Int -> Cmd GlobalMsg
+postSaveUpdate : PacoPosition -> Int -> Cmd Msg
 postSaveUpdate position id =
     Http.post
         { url = "/api/position/" ++ String.fromInt id
@@ -2193,7 +2193,7 @@ decodeStoredPositionData =
         (Decode.field "notation" Decode.string)
 
 
-getAllSavedPositions : Cmd GlobalMsg
+getAllSavedPositions : Cmd Msg
 getAllSavedPositions =
     Http.get
         { url = "/api/position"
@@ -2213,7 +2213,7 @@ decodePacoPositionData =
         decodeStoredPositionData
 
 
-getRandomPosition : Cmd GlobalMsg
+getRandomPosition : Cmd Msg
 getRandomPosition =
     Http.get
         { url = "/api/random"
@@ -2234,7 +2234,7 @@ decodeAnalysisReport =
         (Decode.field "text_summary" Decode.string)
 
 
-postAnalysePosition : PacoPosition -> Cmd GlobalMsg
+postAnalysePosition : PacoPosition -> Cmd Msg
 postAnalysePosition position =
     Http.post
         { url = "/api/analyse"
