@@ -201,6 +201,7 @@ type ToolInputMsg
     = ToolClick Tile
     | ToolDeselect
     | ToolHover (Maybe Tile)
+    | ToolDelete
 
 
 type ToolOutputMsg
@@ -803,7 +804,10 @@ applyRedo model =
 -}
 keyUp : KeyStroke -> EditorModel -> ( EditorModel, Cmd Msg )
 keyUp stroke model =
-    if stroke.ctrlKey == True && stroke.altKey == False then
+    if stroke.ctrlKey == False && stroke.altKey == False then
+        regularKeyUp stroke.key model
+
+    else if stroke.ctrlKey == True && stroke.altKey == False then
         ctrlKeyUp stroke.key model
 
     else
@@ -820,6 +824,21 @@ ctrlKeyUp key model =
 
         "y" ->
             ( applyRedo model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+regularKeyUp : String -> EditorModel -> ( EditorModel, Cmd Msg )
+regularKeyUp key model =
+    case Debug.log "keyUp" key of
+        "Delete" ->
+            let
+                ( newTool, outMsg ) =
+                    updateSmartTool (P.getC model.game) ToolDelete model.smartTool
+            in
+            handleToolOutputMsg outMsg
+                { model | smartTool = newTool }
 
         _ ->
             ( model, Cmd.none )
@@ -939,6 +958,8 @@ pieceHighlighted tile highlight piece =
         False
 
 
+{-| TODO: I'll need to break this into pieces, when the tool is finished.
+-}
 updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
 updateSmartTool position msg model =
     case msg of
@@ -1022,6 +1043,24 @@ updateSmartTool position msg model =
 
         ToolDeselect ->
             ( { model | highlight = Nothing }, ToolNoOp )
+
+        ToolDelete ->
+            case model.highlight of
+                Just ( highlightTile, highlight ) ->
+                    -- Delete all pieces that are currently selected.
+                    let
+                        deleteAction piece =
+                            not (pieceHighlighted highlightTile highlight piece)
+
+                        newPosition =
+                            { position | pieces = List.filter deleteAction position.pieces }
+                    in
+                    ( { model | highlight = Just ( highlightTile, HighlightBoth ) }
+                    , ToolCommit newPosition
+                    )
+
+                Nothing ->
+                    ( model, ToolNoOp )
 
 
 deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
