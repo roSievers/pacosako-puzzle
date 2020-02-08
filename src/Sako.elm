@@ -3,6 +3,7 @@ module Sako exposing
     , PacoPiece
     , Tile(..)
     , Type(..)
+    , defaultInitialPosition
     , exportExchangeNotation
     , importExchangeNotation
     , importExchangeNotationList
@@ -58,6 +59,48 @@ type alias PacoPiece =
     , color : Color
     , position : Tile
     }
+
+
+pacoPiece : Color -> Type -> Tile -> PacoPiece
+pacoPiece color pieceType position =
+    { pieceType = pieceType, color = color, position = position }
+
+
+defaultInitialPosition : List PacoPiece
+defaultInitialPosition =
+    [ pacoPiece White Rock (Tile 0 0)
+    , pacoPiece White Knight (Tile 1 0)
+    , pacoPiece White Bishop (Tile 2 0)
+    , pacoPiece White Queen (Tile 3 0)
+    , pacoPiece White King (Tile 4 0)
+    , pacoPiece White Bishop (Tile 5 0)
+    , pacoPiece White Knight (Tile 6 0)
+    , pacoPiece White Rock (Tile 7 0)
+    , pacoPiece White Pawn (Tile 0 1)
+    , pacoPiece White Pawn (Tile 1 1)
+    , pacoPiece White Pawn (Tile 2 1)
+    , pacoPiece White Pawn (Tile 3 1)
+    , pacoPiece White Pawn (Tile 4 1)
+    , pacoPiece White Pawn (Tile 5 1)
+    , pacoPiece White Pawn (Tile 6 1)
+    , pacoPiece White Pawn (Tile 7 1)
+    , pacoPiece Black Pawn (Tile 0 6)
+    , pacoPiece Black Pawn (Tile 1 6)
+    , pacoPiece Black Pawn (Tile 2 6)
+    , pacoPiece Black Pawn (Tile 3 6)
+    , pacoPiece Black Pawn (Tile 4 6)
+    , pacoPiece Black Pawn (Tile 5 6)
+    , pacoPiece Black Pawn (Tile 6 6)
+    , pacoPiece Black Pawn (Tile 7 6)
+    , pacoPiece Black Rock (Tile 0 7)
+    , pacoPiece Black Knight (Tile 1 7)
+    , pacoPiece Black Bishop (Tile 2 7)
+    , pacoPiece Black Queen (Tile 3 7)
+    , pacoPiece Black King (Tile 4 7)
+    , pacoPiece Black Bishop (Tile 5 7)
+    , pacoPiece Black Knight (Tile 6 7)
+    , pacoPiece Black Rock (Tile 7 7)
+    ]
 
 
 

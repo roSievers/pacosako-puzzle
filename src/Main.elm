@@ -193,48 +193,10 @@ svgY (SvgCoord _ y) =
     y
 
 
-pacoPiece : Sako.Color -> Sako.Type -> Tile -> PacoPiece
-pacoPiece color pieceType position =
-    { pieceType = pieceType, color = color, position = position }
-
-
 initialPosition : PacoPosition
 initialPosition =
     { moveNumber = 0
-    , pieces =
-        [ pacoPiece Sako.White Sako.Rock (Tile 0 0)
-        , pacoPiece Sako.White Sako.Knight (Tile 1 0)
-        , pacoPiece Sako.White Sako.Bishop (Tile 2 0)
-        , pacoPiece Sako.White Sako.Queen (Tile 3 0)
-        , pacoPiece Sako.White Sako.King (Tile 4 0)
-        , pacoPiece Sako.White Sako.Bishop (Tile 5 0)
-        , pacoPiece Sako.White Sako.Knight (Tile 6 0)
-        , pacoPiece Sako.White Sako.Rock (Tile 7 0)
-        , pacoPiece Sako.White Sako.Pawn (Tile 0 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 1 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 2 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 3 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 4 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 5 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 6 1)
-        , pacoPiece Sako.White Sako.Pawn (Tile 7 1)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 0 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 1 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 2 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 3 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 4 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 5 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 6 6)
-        , pacoPiece Sako.Black Sako.Pawn (Tile 7 6)
-        , pacoPiece Sako.Black Sako.Rock (Tile 0 7)
-        , pacoPiece Sako.Black Sako.Knight (Tile 1 7)
-        , pacoPiece Sako.Black Sako.Bishop (Tile 2 7)
-        , pacoPiece Sako.Black Sako.Queen (Tile 3 7)
-        , pacoPiece Sako.Black Sako.King (Tile 4 7)
-        , pacoPiece Sako.Black Sako.Bishop (Tile 5 7)
-        , pacoPiece Sako.Black Sako.Knight (Tile 6 7)
-        , pacoPiece Sako.Black Sako.Rock (Tile 7 7)
-        ]
+    , pieces = Sako.defaultInitialPosition
     }
 
 
