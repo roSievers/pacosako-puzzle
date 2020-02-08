@@ -134,6 +134,7 @@ saveStateId saveState =
 type alias EditorModel =
     { saveState : SaveState
     , game : Pivot PacoPosition
+    , preview : Maybe PacoPosition
     , drag : DragState
     , windowSize : ( Int, Int )
     , userPaste : String
@@ -147,7 +148,19 @@ type alias EditorModel =
 
 type alias SmartToolModel =
     { highlight : Maybe ( Tile, Highlight )
+    , dragStartTile : Maybe Tile
+    , dragDelta : Maybe SvgCoord
+    , draggingPieces : List PacoPiece
     , hover : Maybe Tile
+    }
+
+
+smartToolRemoveDragInfo : SmartToolModel -> SmartToolModel
+smartToolRemoveDragInfo tool =
+    { tool
+        | dragStartTile = Nothing
+        , draggingPieces = []
+        , dragDelta = Nothing
     }
 
 
@@ -196,6 +209,9 @@ nextHighlight newTile maybeHighlight =
 initSmartTool : SmartToolModel
 initSmartTool =
     { highlight = Nothing
+    , dragStartTile = Nothing
+    , dragDelta = Nothing
+    , draggingPieces = []
     , hover = Nothing
     }
 
@@ -206,16 +222,29 @@ type ToolInputMsg
     | ToolHover (Maybe Tile)
     | ToolDelete
     | ToolAdd Sako.Color Sako.Type
+    | ToolStartDrag SvgCoord Tile
+    | ToolDrag SvgCoord SvgCoord
+    | ToolStopDrag Tile Tile
 
 
 type ToolOutputMsg
     = ToolNoOp -- Don't do anything.
     | ToolCommit PacoPosition -- Add state to history.
+    | ToolPreview PacoPosition -- Don't add this to the history.
+    | ToolRollback -- Remove an ephemeral state that was set by ToolPreview
 
 
 type BoardDecoration
     = HighlightTile ( Tile, Highlight )
     | DropTarget Tile
+    | DragPiece DragPieceData
+
+
+type alias DragPieceData =
+    { color : Sako.Color
+    , pieceType : Sako.Type
+    , coord : SvgCoord
+    }
 
 
 getHighlightTile : BoardDecoration -> Maybe ( Tile, Highlight )
@@ -233,6 +262,16 @@ getDropTarget decoration =
     case decoration of
         DropTarget tile ->
             Just tile
+
+        _ ->
+            Nothing
+
+
+getDragPiece : BoardDecoration -> Maybe DragPieceData
+getDragPiece decoration =
+    case decoration of
+        DragPiece data ->
+            Just data
 
         _ ->
             Nothing
@@ -295,16 +334,15 @@ type DragState
     | Dragging { start : SvgCoord, current : SvgCoord }
 
 
-startDrag : Rect -> Mouse.Event -> DragState
+startDrag : Rect -> Mouse.Event -> { start : SvgCoord, current : SvgCoord }
 startDrag rect event =
     let
         start =
             gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
     in
-    Dragging
-        { start = start
-        , current = start
-        }
+    { start = start
+    , current = start
+    }
 
 
 relativeInside : Rect -> ( Float, Float ) -> ( Float, Float )
@@ -436,6 +474,7 @@ initialEditor : Decode.Value -> EditorModel
 initialEditor flags =
     { saveState = SaveNotRequired
     , game = P.singleton initialPosition
+    , preview = Nothing
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , userPaste = ""
@@ -632,9 +671,19 @@ updateEditor msg model =
         -- When we register a mouse down event on the board we read the current board position
         -- from the DOM.
         MouseDown event ->
-            ( { model | drag = startDrag model.rect event }
-            , Cmd.none
-            )
+            let
+                dragData =
+                    startDrag model.rect event
+
+                maybeTile =
+                    safeTileCoordinate dragData.start
+            in
+            case maybeTile of
+                Just tile ->
+                    clickStart dragData.start tile { model | drag = Dragging dragData }
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         MouseMove event ->
             handleMouseMove event model
@@ -823,6 +872,17 @@ regularKeyUp key model =
             ( model, Cmd.none )
 
 
+clickStart : SvgCoord -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
+clickStart down downTile model =
+    let
+        ( newTool, outMsg ) =
+            updateSmartTool (P.getC model.game)
+                (ToolStartDrag down downTile)
+                model.smartTool
+    in
+    handleToolOutputMsg outMsg { model | smartTool = newTool }
+
+
 clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
 clickRelease down up model =
     smartToolRelease (safeTileCoordinate down) (safeTileCoordinate up) model
@@ -830,24 +890,25 @@ clickRelease down up model =
 
 smartToolRelease : Maybe Tile -> Maybe Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 smartToolRelease down up model =
-    if down == up then
-        case up of
-            Just clickedTileCoordinate ->
-                let
-                    ( newTool, outMsg ) =
-                        updateSmartTool (P.getC model.game) (ToolClick clickedTileCoordinate) model.smartTool
-                in
-                handleToolOutputMsg outMsg { model | smartTool = newTool }
+    let
+        inMsg =
+            if down == up then
+                case up of
+                    Just clickedTileCoordinate ->
+                        ToolClick clickedTileCoordinate
 
-            Nothing ->
-                let
-                    ( newTool, outMsg ) =
-                        updateSmartTool (P.getC model.game) ToolDeselect model.smartTool
-                in
-                handleToolOutputMsg outMsg { model | smartTool = newTool }
+                    Nothing ->
+                        ToolDeselect
 
-    else
-        ( model, Cmd.none )
+            else
+                Maybe.map2 ToolStopDrag down up
+                    |> Maybe.withDefault
+                        ToolDeselect
+
+        ( newTool, outMsg ) =
+            updateSmartTool (P.getC model.game) inMsg model.smartTool
+    in
+    handleToolOutputMsg outMsg { model | smartTool = newTool }
 
 
 handleToolOutputMsg : ToolOutputMsg -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -857,7 +918,18 @@ handleToolOutputMsg msg model =
             ( model, Cmd.none )
 
         ToolCommit position ->
-            ( { model | game = addHistoryState position model.game }, Cmd.none )
+            ( { model
+                | game = addHistoryState position model.game
+                , preview = Nothing
+              }
+            , Cmd.none
+            )
+
+        ToolPreview preview ->
+            ( { model | preview = Just preview }, Cmd.none )
+
+        ToolRollback ->
+            ( { model | preview = Nothing }, Cmd.none )
 
 
 handleMouseMove : Mouse.Event -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -876,15 +948,22 @@ handleMouseMove event model =
 
         --Moving the mouse when it is held down.
         Dragging { start } ->
-            ( { model
-                | drag =
-                    Dragging
-                        { start = start
-                        , current = gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
-                        }
-              }
-            , Cmd.none
-            )
+            let
+                gameSpacePos =
+                    gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+
+                ( newTool, outMsg ) =
+                    updateSmartTool (P.getC model.game) (ToolDrag start gameSpacePos) model.smartTool
+            in
+            handleToolOutputMsg outMsg
+                { model
+                    | smartTool = newTool
+                    , drag =
+                        Dragging
+                            { start = start
+                            , current = gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+                            }
+                }
 
 
 moveDrag : Rect -> Mouse.Event -> DragState -> DragState
@@ -937,11 +1016,19 @@ updateSmartTool position msg model =
                         in
                         if pieceCountOnSelectedTile > 1 then
                             -- If there are two pieces, cycle through selection states.
-                            ( { model | highlight = nextHighlight tile model.highlight }, ToolNoOp )
+                            ( smartToolRemoveDragInfo
+                                { model
+                                    | highlight = nextHighlight tile model.highlight
+                                }
+                            , ToolRollback
+                            )
 
                         else
                             -- If there is only one piece, then we remove the selection.
-                            ( { model | highlight = Nothing }, ToolNoOp )
+                            ( smartToolRemoveDragInfo
+                                { model | highlight = Nothing }
+                            , ToolRollback
+                            )
 
                     else
                         let
@@ -970,16 +1057,28 @@ updateSmartTool position msg model =
                                 { position | pieces = List.map moveAction position.pieces }
                         in
                         if sourcePieces == [] then
-                            ( { model | highlight = Just ( tile, HighlightBoth ) }, ToolNoOp )
+                            ( smartToolRemoveDragInfo
+                                { model | highlight = Just ( tile, HighlightBoth ) }
+                            , ToolRollback
+                            )
 
                         else if moveBlocked then
-                            ( { model | highlight = Nothing }, ToolNoOp )
+                            ( smartToolRemoveDragInfo
+                                { model | highlight = Nothing }
+                            , ToolRollback
+                            )
 
                         else
-                            ( { model | highlight = Nothing }, ToolCommit newPosition )
+                            ( smartToolRemoveDragInfo
+                                { model | highlight = Nothing }
+                            , ToolCommit newPosition
+                            )
 
                 Nothing ->
-                    ( { model | highlight = Just ( tile, HighlightBoth ) }, ToolNoOp )
+                    ( smartToolRemoveDragInfo
+                        { model | highlight = Just ( tile, HighlightBoth ) }
+                    , ToolRollback
+                    )
 
         ToolHover maybeTile ->
             -- To show a hover marker, we need both a highlighted tile and a
@@ -1004,25 +1103,33 @@ updateSmartTool position msg model =
                 |> Maybe.withDefault ( { model | hover = Nothing }, ToolNoOp )
 
         ToolDeselect ->
-            ( { model | highlight = Nothing }, ToolNoOp )
+            ( smartToolRemoveDragInfo { model | highlight = Nothing }, ToolRollback )
 
         ToolDelete ->
             case model.highlight of
                 Just ( highlightTile, highlight ) ->
                     -- Delete all pieces that are currently selected.
                     let
+                        deletionHighlight =
+                            if highlight == HighlightLingering then
+                                HighlightBoth
+
+                            else
+                                highlight
+
                         deleteAction piece =
-                            not (pieceHighlighted highlightTile highlight piece)
+                            not (pieceHighlighted highlightTile deletionHighlight piece)
 
                         newPosition =
                             { position | pieces = List.filter deleteAction position.pieces }
                     in
-                    ( { model | highlight = Just ( highlightTile, HighlightBoth ) }
+                    ( smartToolRemoveDragInfo
+                        { model | highlight = Just ( highlightTile, HighlightBoth ) }
                     , ToolCommit newPosition
                     )
 
                 Nothing ->
-                    ( model, ToolNoOp )
+                    ( smartToolRemoveDragInfo model, ToolRollback )
 
         ToolAdd color pieceType ->
             case model.highlight of
@@ -1038,12 +1145,95 @@ updateSmartTool position msg model =
                                         :: List.filter deleteAction position.pieces
                             }
                     in
-                    ( { model | highlight = Just ( highlightTile, HighlightLingering ) }
+                    ( smartToolRemoveDragInfo
+                        { model | highlight = Just ( highlightTile, HighlightLingering ) }
                     , ToolCommit newPosition
                     )
 
                 Nothing ->
-                    ( model, ToolNoOp )
+                    ( smartToolRemoveDragInfo model, ToolRollback )
+
+        ToolStartDrag _ startTile ->
+            let
+                highlightType =
+                    case model.highlight of
+                        Just ( highlightTile, highlight ) ->
+                            if highlightTile == startTile && highlight /= HighlightLingering then
+                                highlight
+
+                            else
+                                HighlightBoth
+
+                        Nothing ->
+                            HighlightBoth
+
+                deleteAction piece =
+                    pieceHighlighted startTile highlightType piece
+
+                newPosition =
+                    { position
+                        | pieces = List.filter (not << deleteAction) position.pieces
+                    }
+
+                draggingPieces =
+                    List.filter deleteAction position.pieces
+            in
+            ( { model | dragStartTile = Just startTile, draggingPieces = draggingPieces }
+            , ToolPreview newPosition
+            )
+
+        ToolDrag (SvgCoord ax ay) (SvgCoord bx by) ->
+            ( { model | dragDelta = Just (SvgCoord (bx - ax) (by - ay)) }
+            , ToolNoOp
+            )
+
+        ToolStopDrag startTile targetTile ->
+            let
+                highlightType =
+                    case model.highlight of
+                        Just ( highlightTile, highlight ) ->
+                            if highlightTile == startTile && highlight /= HighlightLingering then
+                                highlight
+
+                            else
+                                HighlightBoth
+
+                        Nothing ->
+                            HighlightBoth
+
+                sourcePieces =
+                    List.filter (pieceHighlighted startTile highlightType) position.pieces
+
+                involvedPieces =
+                    List.filter (Sako.isAt targetTile) position.pieces ++ sourcePieces
+
+                ( whiteCount, blackCount ) =
+                    ( List.count (Sako.isColor Sako.White) involvedPieces
+                    , List.count (Sako.isColor Sako.Black) involvedPieces
+                    )
+
+                moveBlocked =
+                    whiteCount > 1 || blackCount > 1
+
+                moveAction piece =
+                    if pieceHighlighted startTile highlightType piece then
+                        { piece | position = targetTile }
+
+                    else
+                        piece
+
+                newPosition =
+                    { position | pieces = List.map moveAction position.pieces }
+            in
+            if sourcePieces == [] || moveBlocked then
+                ( smartToolRemoveDragInfo { model | highlight = Nothing }
+                , ToolRollback
+                )
+
+            else
+                ( smartToolRemoveDragInfo { model | highlight = Nothing }
+                , ToolCommit newPosition
+                )
 
 
 {-| Adds a new state, storing the current state in the history. If there currently is a redo chain
@@ -1270,7 +1460,7 @@ loadPositionPreview taco position =
         { onPress = Just (LoadIntoEditor position)
         , label =
             Element.html
-                (positionSvg
+                (positionSvg taco
                     { position = position
                     , colorScheme = taco.colorScheme
                     , sideLength = 250
@@ -1297,7 +1487,7 @@ editorUi taco model =
         , Element.row
             [ width fill, height fill ]
             [ Element.html FontAwesome.Styles.css
-            , positionView taco model (P.getC model.game) model.drag |> Element.map EditorMsgWrapper
+            , positionView taco model model.drag |> Element.map EditorMsgWrapper
             , sidebar taco model
             ]
         ]
@@ -1340,8 +1530,8 @@ windowSafetyMargin =
     50
 
 
-positionView : Taco -> EditorModel -> PacoPosition -> DragState -> Element EditorMsg
-positionView taco editor position drag =
+positionView : Taco -> EditorModel -> DragState -> Element EditorMsg
+positionView taco editor drag =
     let
         ( _, windowHeight ) =
             editor.windowSize
@@ -1355,8 +1545,9 @@ positionView taco editor position drag =
                     , Mouse.onUp MouseUp
                     , Html.Attributes.id "boardDiv"
                     ]
-                    [ positionSvg
-                        { position = position
+                    [ positionSvg taco
+                        { position =
+                            editor.preview |> Maybe.withDefault (P.getC editor.game)
                         , colorScheme = taco.colorScheme
                         , sideLength = windowHeight - windowSafetyMargin
                         , drag = drag
@@ -1372,10 +1563,31 @@ positionView taco editor position drag =
 
 toolDecoration : EditorModel -> List BoardDecoration
 toolDecoration model =
-    [ model.smartTool.highlight |> Maybe.map HighlightTile
-    , model.smartTool.hover |> Maybe.map DropTarget
-    ]
+    ([ model.smartTool.highlight |> Maybe.map HighlightTile
+     , model.smartTool.hover |> Maybe.map DropTarget
+     , model.smartTool.dragStartTile
+        |> Maybe.map (\tile -> HighlightTile ( tile, HighlightBoth ))
+     ]
         |> List.filterMap identity
+    )
+        ++ (model.smartTool.draggingPieces
+                |> List.map
+                    (\piece ->
+                        let
+                            (SvgCoord dx dy) =
+                                model.smartTool.dragDelta
+                                    |> Maybe.withDefault (SvgCoord 0 0)
+
+                            (SvgCoord x y) =
+                                coordinateOfTile piece.position
+                        in
+                        DragPiece
+                            { color = piece.color
+                            , pieceType = piece.pieceType
+                            , coord = SvgCoord (x + dx) (y + dy)
+                            }
+                    )
+           )
 
 
 
@@ -1663,16 +1875,18 @@ sakoEditorId =
 
 
 positionSvg :
-    { position : PacoPosition
-    , sideLength : Int
-    , colorScheme : Pieces.ColorScheme
-    , drag : DragState
-    , viewMode : ViewMode
-    , nodeId : Maybe String
-    , decoration : List BoardDecoration
-    }
+    Taco
+    ->
+        { position : PacoPosition
+        , sideLength : Int
+        , colorScheme : Pieces.ColorScheme
+        , drag : DragState
+        , viewMode : ViewMode
+        , nodeId : Maybe String
+        , decoration : List BoardDecoration
+        }
     -> Html EditorMsg
-positionSvg config =
+positionSvg taco config =
     let
         idAttribute =
             case config.nodeId of
@@ -1693,8 +1907,8 @@ positionSvg config =
         [ board config.viewMode
         , highlightLayer config.decoration
         , dropTargetLayer config.decoration
-        , dragHints config.drag
         , piecesSvg config.colorScheme config.position
+        , dragLayer taco config.decoration
         ]
 
 
@@ -1750,6 +1964,33 @@ dropTargetSvg (Tile x y) =
         []
 
 
+dragLayer : Taco -> List BoardDecoration -> Svg a
+dragLayer taco decorations =
+    decorations
+        |> List.filterMap getDragPiece
+        |> List.map (dragSvg taco.colorScheme)
+        |> Svg.g []
+
+
+dragSvg : Pieces.ColorScheme -> DragPieceData -> Svg a
+dragSvg colorScheme data =
+    let
+        (SvgCoord x y) =
+            data.coord
+    in
+    Svg.g
+        [ Svg.Attributes.transform
+            ("translate("
+                ++ String.fromInt x
+                ++ ", "
+                ++ String.fromInt y
+                ++ ")"
+            )
+        ]
+        [ Pieces.figure colorScheme data.pieceType data.color
+        ]
+
+
 piecesSvg : Pieces.ColorScheme -> PacoPosition -> Svg msg
 piecesSvg colorScheme pacoPosition =
     pacoPosition.pieces
@@ -1774,13 +2015,22 @@ pieceSvg colorScheme piece =
         ]
 
 
+coordinateOfTile : Tile -> SvgCoord
+coordinateOfTile (Tile x y) =
+    SvgCoord (100 * x) (700 - 100 * y)
+
+
 tileTransform : Tile -> Svg.Attribute a
-tileTransform (Tile x y) =
+tileTransform tile =
+    let
+        (SvgCoord x y) =
+            coordinateOfTile tile
+    in
     Svg.Attributes.transform
         ("translate("
-            ++ String.fromInt (100 * x)
+            ++ String.fromInt x
             ++ ", "
-            ++ String.fromInt (700 - 100 * y)
+            ++ String.fromInt y
             ++ ")"
         )
 
@@ -1861,31 +2111,6 @@ rowTag digit y =
         [ Svg.text digit ]
 
 
-dragHints : DragState -> Svg msg
-dragHints drag =
-    case drag of
-        DragOff ->
-            Svg.g [] []
-
-        Dragging { start, current } ->
-            Svg.g []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <| String.fromInt <| svgX start
-                    , Svg.Attributes.cy <| String.fromInt <| svgY start
-                    , Svg.Attributes.r "30"
-                    , Svg.Attributes.fill "#F00"
-                    ]
-                    []
-                , Svg.circle
-                    [ Svg.Attributes.cx <| String.fromInt <| svgX current
-                    , Svg.Attributes.cy <| String.fromInt <| svgY current
-                    , Svg.Attributes.r "30"
-                    , Svg.Attributes.fill "#0F0"
-                    ]
-                    []
-                ]
-
-
 icon : List (Element.Attribute msg) -> Icon -> Element msg
 icon attributes iconType =
     Element.el attributes (Element.html (viewIcon iconType))
@@ -1929,7 +2154,7 @@ parsedMarkdownPaste taco model =
                 , label =
                     Element.row [ spacing 5 ]
                         [ Element.html
-                            (positionSvg
+                            (positionSvg taco
                                 { position = pacoPosition
                                 , colorScheme = taco.colorScheme
                                 , sideLength = 100
