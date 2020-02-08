@@ -32,7 +32,7 @@ import Parser exposing ((|.), (|=), Parser)
 -}
 type Type
     = Pawn
-    | Rock
+    | Rook
     | Knight
     | Bishop
     | Queen
@@ -90,14 +90,14 @@ pacoPiece color pieceType position =
 
 defaultInitialPosition : List PacoPiece
 defaultInitialPosition =
-    [ pacoPiece White Rock (Tile 0 0)
+    [ pacoPiece White Rook (Tile 0 0)
     , pacoPiece White Knight (Tile 1 0)
     , pacoPiece White Bishop (Tile 2 0)
     , pacoPiece White Queen (Tile 3 0)
     , pacoPiece White King (Tile 4 0)
     , pacoPiece White Bishop (Tile 5 0)
     , pacoPiece White Knight (Tile 6 0)
-    , pacoPiece White Rock (Tile 7 0)
+    , pacoPiece White Rook (Tile 7 0)
     , pacoPiece White Pawn (Tile 0 1)
     , pacoPiece White Pawn (Tile 1 1)
     , pacoPiece White Pawn (Tile 2 1)
@@ -114,14 +114,14 @@ defaultInitialPosition =
     , pacoPiece Black Pawn (Tile 5 6)
     , pacoPiece Black Pawn (Tile 6 6)
     , pacoPiece Black Pawn (Tile 7 6)
-    , pacoPiece Black Rock (Tile 0 7)
+    , pacoPiece Black Rook (Tile 0 7)
     , pacoPiece Black Knight (Tile 1 7)
     , pacoPiece Black Bishop (Tile 2 7)
     , pacoPiece Black Queen (Tile 3 7)
     , pacoPiece Black King (Tile 4 7)
     , pacoPiece Black Bishop (Tile 5 7)
     , pacoPiece Black Knight (Tile 6 7)
-    , pacoPiece Black Rock (Tile 7 7)
+    , pacoPiece Black Rook (Tile 7 7)
     ]
 
 
@@ -303,7 +303,7 @@ markdownTypeChar pieceType =
         Pawn ->
             "P"
 
-        Rock ->
+        Rook ->
             "R"
 
         Knight ->
@@ -325,7 +325,7 @@ parseTypeChar : Parser (Maybe Type)
 parseTypeChar =
     Parser.oneOf
         [ Parser.succeed (Just Pawn) |. Parser.symbol "P"
-        , Parser.succeed (Just Rock) |. Parser.symbol "R"
+        , Parser.succeed (Just Rook) |. Parser.symbol "R"
         , Parser.succeed (Just Knight) |. Parser.symbol "N"
         , Parser.succeed (Just Bishop) |. Parser.symbol "B"
         , Parser.succeed (Just Queen) |. Parser.symbol "Q"

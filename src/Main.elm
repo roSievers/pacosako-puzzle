@@ -3,9 +3,8 @@ module Main exposing (main)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
-import Element exposing (Element, centerX, centerY, fill, fillPortion, height, padding, spacing, width)
+import Element exposing (Element, centerX, centerY, fill, height, padding, spacing, width)
 import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region
@@ -137,9 +136,6 @@ type alias EditorModel =
     , game : Pivot PacoPosition
     , drag : DragState
     , windowSize : ( Int, Int )
-    , tool : EditorTool
-    , createToolColor : Sako.Color
-    , createToolType : Sako.Type
     , userPaste : String
     , pasteParsed : PositionParseResult
     , viewMode : ViewMode
@@ -159,6 +155,7 @@ type Highlight
     = HighlightBoth
     | HighlightWhite
     | HighlightBlack
+    | HighlightLingering
 
 
 nextHighlight : Tile -> Maybe ( Tile, Highlight ) -> Maybe ( Tile, Highlight )
@@ -188,6 +185,13 @@ nextHighlight newTile maybeHighlight =
             else
                 Just ( newTile, HighlightBoth )
 
+        Just ( oldTile, HighlightLingering ) ->
+            if oldTile == newTile then
+                Just ( oldTile, HighlightBoth )
+
+            else
+                Just ( newTile, HighlightBoth )
+
 
 initSmartTool : SmartToolModel
 initSmartTool =
@@ -201,6 +205,7 @@ type ToolInputMsg
     | ToolDeselect
     | ToolHover (Maybe Tile)
     | ToolDelete
+    | ToolAdd Sako.Color Sako.Type
 
 
 type ToolOutputMsg
@@ -241,11 +246,6 @@ type PositionParseResult
     = NoInput
     | ParseError String
     | ParseSuccess PacoPosition
-
-
-type EditorTool
-    = CreateTool
-    | SmartTool
 
 
 type alias PacoPosition =
@@ -333,14 +333,6 @@ gameSpaceCoordinate elementRect gameView coord =
         |> (\( x, y ) -> SvgCoord x y)
 
 
-{-| Transforms an Svg coordinate into a logical tile coordinate.
-DEPRECATED, due to bad behaviour outside the board
--}
-tileCoordinate : SvgCoord -> Tile
-tileCoordinate (SvgCoord x y) =
-    Tile (x // 100) (7 - y // 100)
-
-
 {-| Transforms an Svg coordinate into a logical tile coordinte.
 Returns Nothing, if the SvgCoordinate is outside the board.
 -}
@@ -387,9 +379,6 @@ type EditorMsg
     | MouseUp Mouse.Event
     | GotBoardPosition (Result Dom.Error Dom.Element)
     | WindowResize Int Int
-    | ToolSelect EditorTool
-    | CreateToolColor Sako.Color
-    | CreateToolType Sako.Type
     | Undo
     | Redo
     | Reset PacoPosition
@@ -406,6 +395,7 @@ type EditorMsg
     | GotRandomPosition PacoPosition
     | RequestAnalysePosition PacoPosition
     | GotAnalysePosition AnalysisReport
+    | ExternalToolMsg ToolInputMsg
 
 
 type BlogEditorMsg
@@ -448,9 +438,6 @@ initialEditor flags =
     , game = P.singleton initialPosition
     , drag = DragOff
     , windowSize = parseWindowSize flags
-    , tool = SmartTool
-    , createToolColor = Sako.White
-    , createToolType = Sako.Pawn
     , userPaste = ""
     , pasteParsed = NoInput
     , viewMode = ShowNumbers
@@ -679,15 +666,6 @@ updateEditor msg model =
                 (Dom.getElement "boardDiv")
             )
 
-        ToolSelect tool ->
-            ( { model | tool = tool }, Cmd.none )
-
-        CreateToolColor newColor ->
-            ( { model | createToolColor = newColor }, Cmd.none )
-
-        CreateToolType newType ->
-            ( { model | createToolType = newType }, Cmd.none )
-
         Undo ->
             ( applyUndo model, Cmd.none )
 
@@ -774,6 +752,14 @@ updateEditor msg model =
         GotAnalysePosition analysis ->
             ( { model | analysis = Just analysis }, Cmd.none )
 
+        ExternalToolMsg toolMsg ->
+            let
+                ( newTool, outMsg ) =
+                    updateSmartTool (P.getC model.game) toolMsg model.smartTool
+            in
+            handleToolOutputMsg outMsg
+                { model | smartTool = newTool }
+
 
 editorStateModify : EditorModel -> EditorModel
 editorStateModify editorModel =
@@ -837,21 +823,9 @@ regularKeyUp key model =
             ( model, Cmd.none )
 
 
-{-| TODO: Currently the tools are "History aware", this can be removed. It will make the plumbing
-around the tools more complicated but will allow easier tools.
-
-They may still need a lower level of history awareness where they can indicate if the current game
-state is meant as a preview or an invalid ephemeral display state that should not be preserved.
-
--}
 clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
 clickRelease down up model =
-    case model.tool of
-        CreateTool ->
-            createToolRelease (tileCoordinate down) (tileCoordinate up) model
-
-        SmartTool ->
-            smartToolRelease (safeTileCoordinate down) (safeTileCoordinate up) model
+    smartToolRelease (safeTileCoordinate down) (safeTileCoordinate up) model
 
 
 smartToolRelease : Maybe Tile -> Maybe Tile -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -891,19 +865,14 @@ handleMouseMove event model =
     case model.drag of
         -- Moving the mouse when it is not held down.
         DragOff ->
-            case model.tool of
-                SmartTool ->
-                    let
-                        gameSpacePos =
-                            gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+            let
+                gameSpacePos =
+                    gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
 
-                        ( newTool, outMsg ) =
-                            updateSmartTool (P.getC model.game) (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
-                    in
-                    handleToolOutputMsg outMsg { model | smartTool = newTool }
-
-                _ ->
-                    ( model, Cmd.none )
+                ( newTool, outMsg ) =
+                    updateSmartTool (P.getC model.game) (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
+            in
+            handleToolOutputMsg outMsg { model | smartTool = newTool }
 
         --Moving the mouse when it is held down.
         Dragging { start } ->
@@ -943,6 +912,9 @@ pieceHighlighted tile highlight piece =
 
             HighlightBlack ->
                 Sako.isColor Sako.Black piece
+
+            HighlightLingering ->
+                False
 
     else
         False
@@ -1052,35 +1024,26 @@ updateSmartTool position msg model =
                 Nothing ->
                     ( model, ToolNoOp )
 
+        ToolAdd color pieceType ->
+            case model.highlight of
+                Just ( highlightTile, _ ) ->
+                    let
+                        deleteAction piece =
+                            piece.color /= color || piece.position /= highlightTile
 
-createToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
-createToolRelease down up model =
-    let
-        oldPosition =
-            P.getC model.game
+                        newPosition =
+                            { position
+                                | pieces =
+                                    { color = color, position = highlightTile, pieceType = pieceType }
+                                        :: List.filter deleteAction position.pieces
+                            }
+                    in
+                    ( { model | highlight = Just ( highlightTile, HighlightLingering ) }
+                    , ToolCommit newPosition
+                    )
 
-        spaceOccupied =
-            List.any (\p -> p.color == model.createToolColor && p.position == up) oldPosition.pieces
-
-        newPiece =
-            { color = model.createToolColor, position = up, pieceType = model.createToolType }
-
-        newPosition _ =
-            { oldPosition | pieces = newPiece :: oldPosition.pieces }
-
-        newHistory _ =
-            addHistoryState (newPosition ()) model.game
-    in
-    if up == down && not spaceOccupied then
-        ( { model
-            | game = newHistory ()
-          }
-            |> editorStateModify
-        , Cmd.none
-        )
-
-    else
-        ( model, Cmd.none )
+                Nothing ->
+                    ( model, ToolNoOp )
 
 
 {-| Adds a new state, storing the current state in the history. If there currently is a redo chain
@@ -1409,14 +1372,10 @@ positionView taco editor position drag =
 
 toolDecoration : EditorModel -> List BoardDecoration
 toolDecoration model =
-    if model.tool == SmartTool then
-        [ model.smartTool.highlight |> Maybe.map HighlightTile
-        , model.smartTool.hover |> Maybe.map DropTarget
-        ]
-            |> List.filterMap identity
-
-    else
-        []
+    [ model.smartTool.highlight |> Maybe.map HighlightTile
+    , model.smartTool.hover |> Maybe.map DropTarget
+    ]
+        |> List.filterMap identity
 
 
 
@@ -1429,7 +1388,9 @@ sidebar : Taco -> EditorModel -> Element Msg
 sidebar taco model =
     Element.column [ width (fill |> Element.maximum 400), height fill, spacing 10, padding 10, Element.alignRight ]
         [ sidebarActionButtons model.game |> Element.map EditorMsgWrapper
-        , toolConfig model |> Element.map EditorMsgWrapper
+        , Element.text "Add piece:"
+        , addPieceButtons Sako.White "White:" model.smartTool |> Element.map EditorMsgWrapper
+        , addPieceButtons Sako.Black "Black:" model.smartTool |> Element.map EditorMsgWrapper
         , colorSchemeConfig taco
         , viewModeConfig model
         , Input.button [] { onPress = Just (EditorMsgWrapper DownloadSvg), label = Element.text "Download as Svg" }
@@ -1509,75 +1470,37 @@ analysePosition position =
     flatButton (Just (RequestAnalysePosition position)) (icon [] Solid.calculator)
 
 
-toolConfig : EditorModel -> Element EditorMsg
-toolConfig editor =
-    Element.column [ width fill ]
-        [ createToolButton editor.tool
-        , if editor.tool == CreateTool then
-            createToolConfig editor
-
-          else
-            Element.none
-        , smartToolButton editor.tool
+addPieceButtons : Sako.Color -> String -> SmartToolModel -> Element EditorMsg
+addPieceButtons color text tool =
+    let
+        hasHighlight =
+            tool.highlight /= Nothing
+    in
+    Element.wrappedRow [ width fill ]
+        [ Element.text text
+        , singleAddPieceButton hasHighlight color Sako.Pawn Solid.chessPawn
+        , singleAddPieceButton hasHighlight color Sako.Rook Solid.chessRook
+        , singleAddPieceButton hasHighlight color Sako.Knight Solid.chessKnight
+        , singleAddPieceButton hasHighlight color Sako.Bishop Solid.chessBishop
+        , singleAddPieceButton hasHighlight color Sako.Queen Solid.chessQueen
+        , singleAddPieceButton hasHighlight color Sako.King Solid.chessKing
         ]
 
 
-createToolButton : EditorTool -> Element EditorMsg
-createToolButton tool =
+singleAddPieceButton : Bool -> Sako.Color -> Sako.Type -> Icon -> Element EditorMsg
+singleAddPieceButton hasHighlight color pieceType buttonIcon =
+    let
+        onPress =
+            if hasHighlight then
+                Just (ExternalToolMsg (ToolAdd color pieceType))
+
+            else
+                Nothing
+    in
     Input.button []
-        { onPress = Just (ToolSelect CreateTool)
-        , label =
-            Element.row
-                ([ width (fillPortion 1)
-                 , spacing 5
-                 , padding 5
-                 , Border.color (Element.rgb255 0 0 0)
-                 , Border.width 1
-                 ]
-                    ++ backgroundFocus (tool == CreateTool)
-                )
-                [ icon [] Solid.chess
-                , Element.text "Add Piece"
-                ]
+        { onPress = onPress
+        , label = Element.row [ padding 7 ] [ icon [] buttonIcon ]
         }
-
-
-smartToolButton : EditorTool -> Element EditorMsg
-smartToolButton tool =
-    Input.button []
-        { onPress = Just (ToolSelect SmartTool)
-        , label =
-            Element.row
-                ([ width (fillPortion 1)
-                 , spacing 5
-                 , padding 5
-                 , Border.color (Element.rgb255 0 0 0)
-                 , Border.width 1
-                 ]
-                    ++ backgroundFocus (tool == SmartTool)
-                )
-                [ icon [] Solid.tools
-                , Element.text "Smart Tool"
-                ]
-        }
-
-
-createToolConfig : EditorModel -> Element EditorMsg
-createToolConfig model =
-    Element.column [ width fill ]
-        [ Element.row []
-            [ toolConfigOption model.createToolColor CreateToolColor Sako.White "White"
-            , toolConfigOption model.createToolColor CreateToolColor Sako.Black "Black"
-            ]
-        , Element.wrappedRow []
-            [ toolConfigOption model.createToolType CreateToolType Sako.Pawn "Pawn"
-            , toolConfigOption model.createToolType CreateToolType Sako.Rock "Rock"
-            , toolConfigOption model.createToolType CreateToolType Sako.Knight "Knight"
-            , toolConfigOption model.createToolType CreateToolType Sako.Bishop "Bishop"
-            , toolConfigOption model.createToolType CreateToolType Sako.Queen "Queen"
-            , toolConfigOption model.createToolType CreateToolType Sako.King "King"
-            ]
-        ]
 
 
 backgroundFocus : Bool -> List (Element.Attribute msg)
@@ -1796,6 +1719,9 @@ highlightSvg ( tile, highlight ) =
 
                 HighlightBlack ->
                     Svg.Attributes.d "m 50 0 v 100 h 50 v -100 z"
+
+                HighlightLingering ->
+                    Svg.Attributes.d "m 50 0 l 50 50 l -50 50 l -50 -50 z"
     in
     Svg.path
         [ tileTransform tile
