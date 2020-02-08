@@ -305,16 +305,6 @@ type SvgCoord
     = SvgCoord Int Int
 
 
-svgX : SvgCoord -> Int
-svgX (SvgCoord x _) =
-    x
-
-
-svgY : SvgCoord -> Int
-svgY (SvgCoord _ y) =
-    y
-
-
 initialPosition : PacoPosition
 initialPosition =
     { moveNumber = 0
@@ -999,225 +989,279 @@ pieceHighlighted tile highlight piece =
         False
 
 
-{-| TODO: I'll need to break this into pieces, when the tool is finished.
--}
-updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
-updateSmartTool position msg model =
-    case msg of
-        ToolClick tile ->
-            case model.highlight of
-                Just ( highlightTile, highlight ) ->
-                    if highlightTile == tile then
-                        let
-                            pieceCountOnSelectedTile =
-                                position.pieces
-                                    |> List.filter (Sako.isAt highlightTile)
-                                    |> List.length
-                        in
-                        if pieceCountOnSelectedTile > 1 then
-                            -- If there are two pieces, cycle through selection states.
-                            ( smartToolRemoveDragInfo
-                                { model
-                                    | highlight = nextHighlight tile model.highlight
-                                }
-                            , ToolRollback
-                            )
+updateSmartToolClick : PacoPosition -> Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolClick position tile model =
+    case model.highlight of
+        Just ( highlightTile, highlight ) ->
+            if highlightTile == tile then
+                updateSmartToolSelection position highlightTile model
+
+            else
+                let
+                    sourcePieces =
+                        List.filter (pieceHighlighted highlightTile highlight) position.pieces
+
+                    involvedPieces =
+                        List.filter (Sako.isAt tile) position.pieces ++ sourcePieces
+
+                    moveAction piece =
+                        if pieceHighlighted highlightTile highlight piece then
+                            { piece | position = tile }
 
                         else
-                            -- If there is only one piece, then we remove the selection.
-                            ( smartToolRemoveDragInfo
-                                { model | highlight = Nothing }
-                            , ToolRollback
-                            )
+                            piece
 
-                    else
-                        let
-                            sourcePieces =
-                                List.filter (pieceHighlighted highlightTile highlight) position.pieces
-
-                            involvedPieces =
-                                List.filter (Sako.isAt tile) position.pieces ++ sourcePieces
-
-                            moveAction piece =
-                                if pieceHighlighted highlightTile highlight piece then
-                                    { piece | position = tile }
-
-                                else
-                                    piece
-
-                            newPosition =
-                                { position | pieces = List.map moveAction position.pieces }
-                        in
-                        if sourcePieces == [] then
-                            ( smartToolRemoveDragInfo
-                                { model | highlight = Just ( tile, HighlightBoth ) }
-                            , ToolRollback
-                            )
-
-                        else if isMoveBlocked involvedPieces then
-                            ( smartToolRemoveDragInfo
-                                { model | highlight = Nothing }
-                            , ToolRollback
-                            )
-
-                        else
-                            ( smartToolRemoveDragInfo
-                                { model | highlight = Nothing }
-                            , ToolCommit newPosition
-                            )
-
-                Nothing ->
+                    newPosition =
+                        { position | pieces = List.map moveAction position.pieces }
+                in
+                if sourcePieces == [] then
                     ( smartToolRemoveDragInfo
                         { model | highlight = Just ( tile, HighlightBoth ) }
                     , ToolRollback
                     )
 
-        ToolHover maybeTile ->
-            -- To show a hover marker, we need both a highlighted tile and a
-            -- hovered tile. Otherwise we don't do anything at all.
-            Maybe.map2
-                (\( highlightTile, _ ) hover ->
-                    if highlightTile == hover then
-                        -- We don't show a hover marker if we are above the
-                        -- highlighted tile.
-                        ( { model | hover = Nothing }, ToolNoOp )
+                else if isMoveBlocked involvedPieces then
+                    ( smartToolRemoveDragInfo
+                        { model | highlight = Nothing }
+                    , ToolRollback
+                    )
 
-                    else if List.all (\p -> p.position /= highlightTile) position.pieces then
-                        -- If the highlight position is empty, then we don't show
-                        -- a highlighted tile either.
-                        ( { model | hover = Nothing }, ToolNoOp )
+                else
+                    ( smartToolRemoveDragInfo
+                        { model | highlight = Nothing }
+                    , ToolCommit newPosition
+                    )
+
+        Nothing ->
+            ( smartToolRemoveDragInfo
+                { model | highlight = Just ( tile, HighlightBoth ) }
+            , ToolRollback
+            )
+
+
+updateSmartToolHover : PacoPosition -> Maybe Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolHover position maybeTile model =
+    -- To show a hover marker, we need both a highlighted tile and a
+    -- hovered tile. Otherwise we don't do anything at all.
+    Maybe.map2
+        (\( highlightTile, _ ) hover ->
+            if highlightTile == hover then
+                -- We don't show a hover marker if we are above the
+                -- highlighted tile.
+                ( { model | hover = Nothing }, ToolNoOp )
+
+            else if List.all (\p -> p.position /= highlightTile) position.pieces then
+                -- If the highlight position is empty, then we don't show
+                -- a highlighted tile either.
+                ( { model | hover = Nothing }, ToolNoOp )
+
+            else
+                ( { model | hover = Just hover }, ToolNoOp )
+        )
+        model.highlight
+        maybeTile
+        |> Maybe.withDefault ( { model | hover = Nothing }, ToolNoOp )
+
+
+updateSmartToolDeselect : SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolDeselect model =
+    ( smartToolRemoveDragInfo { model | highlight = Nothing }, ToolRollback )
+
+
+updateSmartToolDelete : PacoPosition -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolDelete position model =
+    case model.highlight of
+        Just ( highlightTile, highlight ) ->
+            -- Delete all pieces that are currently selected.
+            let
+                deletionHighlight =
+                    if highlight == HighlightLingering then
+                        HighlightBoth
 
                     else
-                        ( { model | hover = Just hover }, ToolNoOp )
-                )
-                model.highlight
-                maybeTile
-                |> Maybe.withDefault ( { model | hover = Nothing }, ToolNoOp )
-
-        ToolDeselect ->
-            ( smartToolRemoveDragInfo { model | highlight = Nothing }, ToolRollback )
-
-        ToolDelete ->
-            case model.highlight of
-                Just ( highlightTile, highlight ) ->
-                    -- Delete all pieces that are currently selected.
-                    let
-                        deletionHighlight =
-                            if highlight == HighlightLingering then
-                                HighlightBoth
-
-                            else
-                                highlight
-
-                        deleteAction piece =
-                            not (pieceHighlighted highlightTile deletionHighlight piece)
-
-                        newPosition =
-                            { position | pieces = List.filter deleteAction position.pieces }
-                    in
-                    ( smartToolRemoveDragInfo
-                        { model | highlight = Just ( highlightTile, HighlightBoth ) }
-                    , ToolCommit newPosition
-                    )
-
-                Nothing ->
-                    ( smartToolRemoveDragInfo model, ToolRollback )
-
-        ToolAdd color pieceType ->
-            case model.highlight of
-                Just ( highlightTile, _ ) ->
-                    let
-                        deleteAction piece =
-                            piece.color /= color || piece.position /= highlightTile
-
-                        newPosition =
-                            { position
-                                | pieces =
-                                    { color = color, position = highlightTile, pieceType = pieceType }
-                                        :: List.filter deleteAction position.pieces
-                            }
-                    in
-                    ( smartToolRemoveDragInfo
-                        { model | highlight = Just ( highlightTile, HighlightLingering ) }
-                    , ToolCommit newPosition
-                    )
-
-                Nothing ->
-                    ( smartToolRemoveDragInfo model, ToolRollback )
-
-        ToolStartDrag _ startTile ->
-            let
-                highlightType =
-                    case model.highlight of
-                        Just ( highlightTile, highlight ) ->
-                            if highlightTile == startTile && highlight /= HighlightLingering then
-                                highlight
-
-                            else
-                                HighlightBoth
-
-                        Nothing ->
-                            HighlightBoth
+                        highlight
 
                 deleteAction piece =
-                    pieceHighlighted startTile highlightType piece
+                    not (pieceHighlighted highlightTile deletionHighlight piece)
+
+                newPosition =
+                    { position | pieces = List.filter deleteAction position.pieces }
+            in
+            ( smartToolRemoveDragInfo
+                { model | highlight = Just ( highlightTile, HighlightBoth ) }
+            , ToolCommit newPosition
+            )
+
+        Nothing ->
+            ( smartToolRemoveDragInfo model, ToolRollback )
+
+
+updateSmartToolAdd : PacoPosition -> Sako.Color -> Sako.Type -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolAdd position color pieceType model =
+    case model.highlight of
+        Just ( highlightTile, _ ) ->
+            let
+                deleteAction piece =
+                    piece.color /= color || piece.position /= highlightTile
 
                 newPosition =
                     { position
-                        | pieces = List.filter (not << deleteAction) position.pieces
+                        | pieces =
+                            { color = color, position = highlightTile, pieceType = pieceType }
+                                :: List.filter deleteAction position.pieces
                     }
-
-                draggingPieces =
-                    List.filter deleteAction position.pieces
             in
-            ( { model | dragStartTile = Just startTile, draggingPieces = draggingPieces }
-            , ToolPreview newPosition
+            ( smartToolRemoveDragInfo
+                { model | highlight = Just ( highlightTile, HighlightLingering ) }
+            , ToolCommit newPosition
             )
 
-        ToolDrag (SvgCoord ax ay) (SvgCoord bx by) ->
-            ( { model | dragDelta = Just (SvgCoord (bx - ax) (by - ay)) }
-            , ToolNoOp
-            )
+        Nothing ->
+            ( smartToolRemoveDragInfo model, ToolRollback )
 
-        ToolStopDrag startTile targetTile ->
-            let
-                highlightType =
-                    case model.highlight of
-                        Just ( highlightTile, highlight ) ->
-                            if highlightTile == startTile && highlight /= HighlightLingering then
-                                highlight
 
-                            else
-                                HighlightBoth
-
-                        Nothing ->
-                            HighlightBoth
-
-                sourcePieces =
-                    List.filter (pieceHighlighted startTile highlightType) position.pieces
-
-                involvedPieces =
-                    List.filter (Sako.isAt targetTile) position.pieces ++ sourcePieces
-
-                moveAction piece =
-                    if pieceHighlighted startTile highlightType piece then
-                        { piece | position = targetTile }
+updateSmartToolStartDrag : PacoPosition -> Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolStartDrag position startTile model =
+    let
+        highlightType =
+            case model.highlight of
+                Just ( highlightTile, highlight ) ->
+                    if highlightTile == startTile && highlight /= HighlightLingering then
+                        highlight
 
                     else
-                        piece
+                        HighlightBoth
 
-                newPosition =
-                    { position | pieces = List.map moveAction position.pieces }
-            in
-            if sourcePieces == [] || isMoveBlocked involvedPieces then
-                ( smartToolRemoveDragInfo { model | highlight = Nothing }
-                , ToolRollback
-                )
+                Nothing ->
+                    HighlightBoth
+
+        deleteAction piece =
+            pieceHighlighted startTile highlightType piece
+
+        newPosition =
+            { position
+                | pieces = List.filter (not << deleteAction) position.pieces
+            }
+
+        draggingPieces =
+            List.filter deleteAction position.pieces
+    in
+    ( { model | dragStartTile = Just startTile, draggingPieces = draggingPieces }
+    , ToolPreview newPosition
+    )
+
+
+updateSmartToolContinueDrag : SvgCoord -> SvgCoord -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolContinueDrag (SvgCoord ax ay) (SvgCoord bx by) model =
+    ( { model | dragDelta = Just (SvgCoord (bx - ax) (by - ay)) }
+    , ToolNoOp
+    )
+
+
+updateSmartToolStopDrag : PacoPosition -> Tile -> Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolStopDrag position startTile targetTile model =
+    let
+        highlightType =
+            case model.highlight of
+                Just ( highlightTile, highlight ) ->
+                    if highlightTile == startTile && highlight /= HighlightLingering then
+                        highlight
+
+                    else
+                        HighlightBoth
+
+                Nothing ->
+                    HighlightBoth
+    in
+    case movePiecesIfPermitted highlightType startTile targetTile position of
+        Just newPosition ->
+            ( smartToolRemoveDragInfo { model | highlight = Nothing }
+            , ToolCommit newPosition
+            )
+
+        Nothing ->
+            ( smartToolRemoveDragInfo { model | highlight = Nothing }
+            , ToolRollback
+            )
+
+
+updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartTool position msg model =
+    case msg of
+        ToolClick tile ->
+            updateSmartToolClick position tile model
+
+        ToolHover maybeTile ->
+            updateSmartToolHover position maybeTile model
+
+        ToolDeselect ->
+            updateSmartToolDeselect model
+
+        ToolDelete ->
+            updateSmartToolDelete position model
+
+        ToolAdd color pieceType ->
+            updateSmartToolAdd position color pieceType model
+
+        ToolStartDrag _ startTile ->
+            updateSmartToolStartDrag position startTile model
+
+        ToolDrag beginDrag endDrag ->
+            updateSmartToolContinueDrag beginDrag endDrag model
+
+        ToolStopDrag startTile targetTile ->
+            updateSmartToolStopDrag position startTile targetTile model
+
+
+updateSmartToolSelection : PacoPosition -> Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolSelection position highlightTile model =
+    let
+        pieceCountOnSelectedTile =
+            position.pieces
+                |> List.filter (Sako.isAt highlightTile)
+                |> List.length
+    in
+    if pieceCountOnSelectedTile > 1 then
+        -- If there are two pieces, cycle through selection states.
+        ( smartToolRemoveDragInfo
+            { model
+                | highlight = nextHighlight highlightTile model.highlight
+            }
+        , ToolRollback
+        )
+
+    else
+        -- If there is only one piece, then we remove the selection.
+        ( smartToolRemoveDragInfo
+            { model | highlight = Nothing }
+        , ToolRollback
+        )
+
+
+movePiecesIfPermitted : Highlight -> Tile -> Tile -> PacoPosition -> Maybe PacoPosition
+movePiecesIfPermitted highlightType startTile targetTile position =
+    let
+        sourcePieces =
+            List.filter (pieceHighlighted startTile highlightType) position.pieces
+
+        involvedPieces =
+            List.filter (Sako.isAt targetTile) position.pieces ++ sourcePieces
+
+        moveAction piece =
+            if pieceHighlighted startTile highlightType piece then
+                { piece | position = targetTile }
 
             else
-                ( smartToolRemoveDragInfo { model | highlight = Nothing }
-                , ToolCommit newPosition
-                )
+                piece
+
+        newPosition =
+            { position | pieces = List.map moveAction position.pieces }
+    in
+    if sourcePieces == [] || isMoveBlocked involvedPieces then
+        Nothing
+
+    else
+        Just newPosition
 
 
 isMoveBlocked : List PacoPiece -> Bool
