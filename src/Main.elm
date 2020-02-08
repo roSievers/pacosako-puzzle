@@ -27,7 +27,7 @@ import Pieces
 import Pivot as P exposing (Pivot)
 import Ports
 import RemoteData exposing (WebData)
-import Sako exposing (PacoPiece, Tile(..), tileX, tileY)
+import Sako exposing (PacoPiece, Tile(..))
 import StaticText
 import Svg exposing (Svg)
 import Svg.Attributes
