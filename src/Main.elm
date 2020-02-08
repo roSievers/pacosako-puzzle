@@ -1038,14 +1038,6 @@ updateSmartTool position msg model =
                             involvedPieces =
                                 List.filter (Sako.isAt tile) position.pieces ++ sourcePieces
 
-                            ( whiteCount, blackCount ) =
-                                ( List.count (Sako.isColor Sako.White) involvedPieces
-                                , List.count (Sako.isColor Sako.Black) involvedPieces
-                                )
-
-                            moveBlocked =
-                                whiteCount > 1 || blackCount > 1
-
                             moveAction piece =
                                 if pieceHighlighted highlightTile highlight piece then
                                     { piece | position = tile }
@@ -1062,7 +1054,7 @@ updateSmartTool position msg model =
                             , ToolRollback
                             )
 
-                        else if moveBlocked then
+                        else if isMoveBlocked involvedPieces then
                             ( smartToolRemoveDragInfo
                                 { model | highlight = Nothing }
                             , ToolRollback
@@ -1207,14 +1199,6 @@ updateSmartTool position msg model =
                 involvedPieces =
                     List.filter (Sako.isAt targetTile) position.pieces ++ sourcePieces
 
-                ( whiteCount, blackCount ) =
-                    ( List.count (Sako.isColor Sako.White) involvedPieces
-                    , List.count (Sako.isColor Sako.Black) involvedPieces
-                    )
-
-                moveBlocked =
-                    whiteCount > 1 || blackCount > 1
-
                 moveAction piece =
                     if pieceHighlighted startTile highlightType piece then
                         { piece | position = targetTile }
@@ -1225,7 +1209,7 @@ updateSmartTool position msg model =
                 newPosition =
                     { position | pieces = List.map moveAction position.pieces }
             in
-            if sourcePieces == [] || moveBlocked then
+            if sourcePieces == [] || isMoveBlocked involvedPieces then
                 ( smartToolRemoveDragInfo { model | highlight = Nothing }
                 , ToolRollback
                 )
@@ -1234,6 +1218,12 @@ updateSmartTool position msg model =
                 ( smartToolRemoveDragInfo { model | highlight = Nothing }
                 , ToolCommit newPosition
                 )
+
+
+isMoveBlocked : List PacoPiece -> Bool
+isMoveBlocked involvedPieces =
+    (List.count (Sako.isColor Sako.White) involvedPieces > 1)
+        || (List.count (Sako.isColor Sako.Black) involvedPieces > 1)
 
 
 {-| Adds a new state, storing the current state in the history. If there currently is a redo chain
