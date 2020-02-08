@@ -138,7 +138,6 @@ type alias EditorModel =
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
-    , deleteToolColor : Maybe Sako.Color
     , createToolColor : Sako.Color
     , createToolType : Sako.Type
     , userPaste : String
@@ -245,8 +244,7 @@ type PositionParseResult
 
 
 type EditorTool
-    = DeleteTool
-    | CreateTool
+    = CreateTool
     | SmartTool
 
 
@@ -390,7 +388,6 @@ type EditorMsg
     | GotBoardPosition (Result Dom.Error Dom.Element)
     | WindowResize Int Int
     | ToolSelect EditorTool
-    | DeleteToolFilter (Maybe Sako.Color)
     | CreateToolColor Sako.Color
     | CreateToolType Sako.Type
     | Undo
@@ -452,7 +449,6 @@ initialEditor flags =
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = SmartTool
-    , deleteToolColor = Nothing
     , createToolColor = Sako.White
     , createToolType = Sako.Pawn
     , userPaste = ""
@@ -686,9 +682,6 @@ updateEditor msg model =
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
 
-        DeleteToolFilter newColor ->
-            ( { model | deleteToolColor = newColor }, Cmd.none )
-
         CreateToolColor newColor ->
             ( { model | createToolColor = newColor }, Cmd.none )
 
@@ -831,7 +824,7 @@ ctrlKeyUp key model =
 
 regularKeyUp : String -> EditorModel -> ( EditorModel, Cmd Msg )
 regularKeyUp key model =
-    case Debug.log "keyUp" key of
+    case key of
         "Delete" ->
             let
                 ( newTool, outMsg ) =
@@ -854,9 +847,6 @@ state is meant as a preview or an invalid ephemeral display state that should no
 clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
 clickRelease down up model =
     case model.tool of
-        DeleteTool ->
-            deleteToolRelease (tileCoordinate down) (tileCoordinate up) model
-
         CreateTool ->
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
@@ -1063,32 +1053,6 @@ updateSmartTool position msg model =
                     ( model, ToolNoOp )
 
 
-deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
-deleteToolRelease down up model =
-    let
-        oldPosition =
-            P.getC model.game
-
-        pieces =
-            List.filter
-                (\p -> p.position /= up || not (colorFilter model.deleteToolColor p))
-                oldPosition.pieces
-
-        newHistory =
-            addHistoryState { oldPosition | pieces = pieces } model.game
-    in
-    if up == down then
-        ( { model
-            | game = newHistory
-          }
-            |> editorStateModify
-        , Cmd.none
-        )
-
-    else
-        ( model, Cmd.none )
-
-
 createToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 createToolRelease down up model =
     let
@@ -1117,19 +1081,6 @@ createToolRelease down up model =
 
     else
         ( model, Cmd.none )
-
-
-{-| Defines a filter for Pieces based on a Player color. Passing in the color `Nothing` defines
-a filter that always returns `True`.
--}
-colorFilter : Maybe Sako.Color -> PacoPiece -> Bool
-colorFilter color piece =
-    case color of
-        Just c ->
-            piece.color == c
-
-        Nothing ->
-            True
 
 
 {-| Adds a new state, storing the current state in the history. If there currently is a redo chain
@@ -1561,13 +1512,7 @@ analysePosition position =
 toolConfig : EditorModel -> Element EditorMsg
 toolConfig editor =
     Element.column [ width fill ]
-        [ deleteToolButton editor.tool
-        , if editor.tool == DeleteTool then
-            colorConfig editor.deleteToolColor DeleteToolFilter
-
-          else
-            Element.none
-        , createToolButton editor.tool
+        [ createToolButton editor.tool
         , if editor.tool == CreateTool then
             createToolConfig editor
 
@@ -1575,26 +1520,6 @@ toolConfig editor =
             Element.none
         , smartToolButton editor.tool
         ]
-
-
-deleteToolButton : EditorTool -> Element EditorMsg
-deleteToolButton tool =
-    Input.button []
-        { onPress = Just (ToolSelect DeleteTool)
-        , label =
-            Element.row
-                ([ width (fillPortion 1)
-                 , spacing 5
-                 , padding 5
-                 , Border.color (Element.rgb255 0 0 0)
-                 , Border.width 1
-                 ]
-                    ++ backgroundFocus (tool == DeleteTool)
-                )
-                [ icon [] Solid.trash
-                , Element.text "Delete Piece"
-                ]
-        }
 
 
 createToolButton : EditorTool -> Element EditorMsg
@@ -1677,15 +1602,6 @@ toolConfigOption currentValue msg buttonValue caption =
         , label =
             Element.text caption
         }
-
-
-colorConfig : Maybe Sako.Color -> (Maybe Sako.Color -> msg) -> Element msg
-colorConfig currentColor msg =
-    Element.row [ width fill ]
-        [ toolConfigOption currentColor msg Nothing "all pieces"
-        , toolConfigOption currentColor msg (Just Sako.White) "white pieces"
-        , toolConfigOption currentColor msg (Just Sako.Black) "black pieces"
-        ]
 
 
 colorPicker : (Pieces.SideColor -> msg) -> Pieces.SideColor -> Pieces.SideColor -> Element msg
