@@ -138,7 +138,6 @@ type alias EditorModel =
     , drag : DragState
     , windowSize : ( Int, Int )
     , tool : EditorTool
-    , moveToolColor : Maybe Sako.Color
     , deleteToolColor : Maybe Sako.Color
     , createToolColor : Sako.Color
     , createToolType : Sako.Type
@@ -152,9 +151,43 @@ type alias EditorModel =
 
 
 type alias SmartToolModel =
-    { highlight : Maybe Tile
+    { highlight : Maybe ( Tile, Highlight )
     , hover : Maybe Tile
     }
+
+
+type Highlight
+    = HighlightBoth
+    | HighlightWhite
+    | HighlightBlack
+
+
+nextHighlight : Tile -> Maybe ( Tile, Highlight ) -> Maybe ( Tile, Highlight )
+nextHighlight newTile maybeHighlight =
+    case maybeHighlight of
+        Nothing ->
+            Just ( newTile, HighlightBoth )
+
+        Just ( oldTile, HighlightBoth ) ->
+            if oldTile == newTile then
+                Just ( oldTile, HighlightWhite )
+
+            else
+                Just ( newTile, HighlightBoth )
+
+        Just ( oldTile, HighlightWhite ) ->
+            if oldTile == newTile then
+                Just ( oldTile, HighlightBlack )
+
+            else
+                Just ( newTile, HighlightBoth )
+
+        Just ( oldTile, HighlightBlack ) ->
+            if oldTile == newTile then
+                Nothing
+
+            else
+                Just ( newTile, HighlightBoth )
 
 
 initSmartTool : SmartToolModel
@@ -176,15 +209,15 @@ type ToolOutputMsg
 
 
 type BoardDecoration
-    = HighlightTile Tile
+    = HighlightTile ( Tile, Highlight )
     | DropTarget Tile
 
 
-getHighlightTile : BoardDecoration -> Maybe Tile
+getHighlightTile : BoardDecoration -> Maybe ( Tile, Highlight )
 getHighlightTile decoration =
     case decoration of
-        HighlightTile tile ->
-            Just tile
+        HighlightTile ( tile, highlight ) ->
+            Just ( tile, highlight )
 
         _ ->
             Nothing
@@ -211,8 +244,7 @@ type PositionParseResult
 
 
 type EditorTool
-    = MoveTool
-    | DeleteTool
+    = DeleteTool
     | CreateTool
     | SmartTool
 
@@ -357,7 +389,6 @@ type EditorMsg
     | GotBoardPosition (Result Dom.Error Dom.Element)
     | WindowResize Int Int
     | ToolSelect EditorTool
-    | MoveToolFilter (Maybe Sako.Color)
     | DeleteToolFilter (Maybe Sako.Color)
     | CreateToolColor Sako.Color
     | CreateToolType Sako.Type
@@ -420,7 +451,6 @@ initialEditor flags =
     , drag = DragOff
     , windowSize = parseWindowSize flags
     , tool = SmartTool
-    , moveToolColor = Nothing
     , deleteToolColor = Nothing
     , createToolColor = Sako.White
     , createToolType = Sako.Pawn
@@ -655,9 +685,6 @@ updateEditor msg model =
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
 
-        MoveToolFilter newColor ->
-            ( { model | moveToolColor = newColor }, Cmd.none )
-
         DeleteToolFilter newColor ->
             ( { model | deleteToolColor = newColor }, Cmd.none )
 
@@ -811,9 +838,6 @@ clickRelease down up model =
         DeleteTool ->
             deleteToolRelease (tileCoordinate down) (tileCoordinate up) model
 
-        MoveTool ->
-            moveToolRelease (tileCoordinate down) (tileCoordinate up) model
-
         CreateTool ->
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
@@ -898,23 +922,51 @@ moveDrag rect event drag =
                 }
 
 
+pieceHighlighted : Tile -> Highlight -> PacoPiece -> Bool
+pieceHighlighted tile highlight piece =
+    if Sako.isAt tile piece then
+        case highlight of
+            HighlightBoth ->
+                True
+
+            HighlightWhite ->
+                Sako.isColor Sako.White piece
+
+            HighlightBlack ->
+                Sako.isColor Sako.Black piece
+
+    else
+        False
+
+
 updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
 updateSmartTool position msg model =
     case msg of
         ToolClick tile ->
             case model.highlight of
-                Just highlight ->
-                    if highlight == tile then
-                        -- Clicking the same tile again deselects
-                        ( { model | highlight = Nothing }, ToolNoOp )
+                Just ( highlightTile, highlight ) ->
+                    if highlightTile == tile then
+                        let
+                            pieceCountOnSelectedTile =
+                                position.pieces
+                                    |> List.filter (Sako.isAt highlightTile)
+                                    |> List.length
+                        in
+                        if pieceCountOnSelectedTile > 1 then
+                            -- If there are two pieces, cycle through selection states.
+                            ( { model | highlight = nextHighlight tile model.highlight }, ToolNoOp )
+
+                        else
+                            -- If there is only one piece, then we remove the selection.
+                            ( { model | highlight = Nothing }, ToolNoOp )
 
                     else
                         let
                             sourcePieces =
-                                List.filter (Sako.isAt highlight) position.pieces
+                                List.filter (pieceHighlighted highlightTile highlight) position.pieces
 
                             involvedPieces =
-                                List.filter (\p -> Sako.isAt highlight p || Sako.isAt tile p) position.pieces
+                                List.filter (Sako.isAt tile) position.pieces ++ sourcePieces
 
                             ( whiteCount, blackCount ) =
                                 ( List.count (Sako.isColor Sako.White) involvedPieces
@@ -924,11 +976,18 @@ updateSmartTool position msg model =
                             moveBlocked =
                                 whiteCount > 1 || blackCount > 1
 
+                            moveAction piece =
+                                if pieceHighlighted highlightTile highlight piece then
+                                    { piece | position = tile }
+
+                                else
+                                    piece
+
                             newPosition =
-                                { position | pieces = List.map (Sako.movePieceConditional highlight tile) position.pieces }
+                                { position | pieces = List.map moveAction position.pieces }
                         in
                         if sourcePieces == [] then
-                            ( { model | highlight = Just tile }, ToolNoOp )
+                            ( { model | highlight = Just ( tile, HighlightBoth ) }, ToolNoOp )
 
                         else if moveBlocked then
                             ( { model | highlight = Nothing }, ToolNoOp )
@@ -937,19 +996,19 @@ updateSmartTool position msg model =
                             ( { model | highlight = Nothing }, ToolCommit newPosition )
 
                 Nothing ->
-                    ( { model | highlight = Just tile }, ToolNoOp )
+                    ( { model | highlight = Just ( tile, HighlightBoth ) }, ToolNoOp )
 
         ToolHover maybeTile ->
             -- To show a hover marker, we need both a highlighted tile and a
             -- hovered tile. Otherwise we don't do anything at all.
             Maybe.map2
-                (\highlight hover ->
-                    if highlight == hover then
+                (\( highlightTile, _ ) hover ->
+                    if highlightTile == hover then
                         -- We don't show a hover marker if we are above the
                         -- highlighted tile.
                         ( { model | hover = Nothing }, ToolNoOp )
 
-                    else if List.all (\p -> p.position /= highlight) position.pieces then
+                    else if List.all (\p -> p.position /= highlightTile) position.pieces then
                         -- If the highlight position is empty, then we don't show
                         -- a highlighted tile either.
                         ( { model | hover = Nothing }, ToolNoOp )
@@ -963,45 +1022,6 @@ updateSmartTool position msg model =
 
         ToolDeselect ->
             ( { model | highlight = Nothing }, ToolNoOp )
-
-
-moveToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
-moveToolRelease down up model =
-    let
-        oldPosition =
-            P.getC model.game
-
-        moveAction piece =
-            if piece.position == down && colorFilter model.moveToolColor piece then
-                { piece | position = up }
-
-            else
-                piece
-
-        involvedPieces =
-            List.filter (\p -> (p.position == down || p.position == up) && colorFilter model.moveToolColor p) oldPosition.pieces
-
-        ( whiteCount, blackCount ) =
-            ( List.count (\p -> p.color == Sako.White) involvedPieces
-            , List.count (\p -> p.color == Sako.Black) involvedPieces
-            )
-
-        newPosition _ =
-            { oldPosition | pieces = List.map moveAction oldPosition.pieces }
-
-        newHistory _ =
-            addHistoryState (newPosition ()) model.game
-    in
-    if whiteCount <= 1 && blackCount <= 1 then
-        ( { model
-            | game = newHistory ()
-          }
-            |> editorStateModify
-        , Cmd.none
-        )
-
-    else
-        ( model, Cmd.none )
 
 
 deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -1502,13 +1522,7 @@ analysePosition position =
 toolConfig : EditorModel -> Element EditorMsg
 toolConfig editor =
     Element.column [ width fill ]
-        [ moveToolButton editor.tool
-        , if editor.tool == MoveTool then
-            colorConfig editor.moveToolColor MoveToolFilter
-
-          else
-            Element.none
-        , deleteToolButton editor.tool
+        [ deleteToolButton editor.tool
         , if editor.tool == DeleteTool then
             colorConfig editor.deleteToolColor DeleteToolFilter
 
@@ -1522,26 +1536,6 @@ toolConfig editor =
             Element.none
         , smartToolButton editor.tool
         ]
-
-
-moveToolButton : EditorTool -> Element EditorMsg
-moveToolButton tool =
-    Input.button []
-        { onPress = Just (ToolSelect MoveTool)
-        , label =
-            Element.row
-                ([ width (fillPortion 1)
-                 , spacing 5
-                 , padding 5
-                 , Border.color (Element.rgb255 0 0 0)
-                 , Border.width 1
-                 ]
-                    ++ backgroundFocus (tool == MoveTool)
-                )
-                [ icon [] Solid.arrowsAlt
-                , Element.text "Move Piece"
-                ]
-        }
 
 
 deleteToolButton : EditorTool -> Element EditorMsg
@@ -1834,11 +1828,23 @@ highlightLayer decorations =
         |> Svg.g []
 
 
-highlightSvg : Tile -> Svg a
-highlightSvg tile =
+highlightSvg : ( Tile, Highlight ) -> Svg a
+highlightSvg ( tile, highlight ) =
+    let
+        shape =
+            case highlight of
+                HighlightBoth ->
+                    Svg.Attributes.d "m 0 0 v 100 h 100 v -100 z"
+
+                HighlightWhite ->
+                    Svg.Attributes.d "m 0 0 v 100 h 50 v -100 z"
+
+                HighlightBlack ->
+                    Svg.Attributes.d "m 50 0 v 100 h 50 v -100 z"
+    in
     Svg.path
         [ tileTransform tile
-        , Svg.Attributes.d "m 0 0 v 100 h 100 v -100 z"
+        , shape
         , Svg.Attributes.fill "rgb(255, 255, 100)"
         ]
         []
