@@ -146,6 +146,7 @@ type alias EditorModel =
     , pasteParsed : PositionParseResult
     , viewMode : ViewMode
     , analysis : Maybe AnalysisReport
+    , rect : Rect
     }
 
 
@@ -209,33 +210,31 @@ emptyPosition =
 
 type DragState
     = DragOff
-    | Dragging { start : SvgCoord, current : SvgCoord, rect : Rect }
+    | Dragging { start : SvgCoord, current : SvgCoord }
 
 
 startDrag : Rect -> Mouse.Event -> DragState
-startDrag element event =
+startDrag rect event =
     let
         start =
-            gameSpaceCoordinate element (realizedBoardViewBox ShowNumbers) event.clientPos
+            gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
     in
     Dragging
         { start = start
         , current = start
-        , rect = element
         }
 
 
-moveDrag : Mouse.Event -> DragState -> DragState
-moveDrag event drag =
+moveDrag : Rect -> Mouse.Event -> DragState -> DragState
+moveDrag rect event drag =
     case drag of
         DragOff ->
             DragOff
 
-        Dragging { start, rect } ->
+        Dragging { start } ->
             Dragging
                 { start = start
                 , current = gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
-                , rect = rect
                 }
 
 
@@ -304,7 +303,7 @@ type EditorMsg
     | MouseDown Mouse.Event
     | MouseMove Mouse.Event
     | MouseUp Mouse.Event
-    | GotBoardPosition (Result Dom.Error Dom.Element) Mouse.Event
+    | GotBoardPosition (Result Dom.Error Dom.Element)
     | WindowResize Int Int
     | ToolSelect EditorTool
     | MoveToolFilter (Maybe Sako.Color)
@@ -378,6 +377,12 @@ initialEditor flags =
     , pasteParsed = NoInput
     , viewMode = ShowNumbers
     , analysis = Nothing
+    , rect =
+        { x = 0
+        , y = 0
+        , width = 1
+        , height = 1
+        }
     }
 
 
@@ -425,6 +430,9 @@ init flags =
             , url = "static/examples.txt"
             }
         , getCurrentLogin
+        , Task.attempt
+            (GotBoardPosition >> EditorMsgWrapper)
+            (Dom.getElement "boardDiv")
         ]
     )
 
@@ -501,7 +509,11 @@ update msg model =
             ( { model | exampleFile = RemoteData.Failure error }, Cmd.none )
 
         OpenPage newPage ->
-            ( { model | page = newPage }, Cmd.none )
+            ( { model | page = newPage }
+            , Task.attempt
+                (GotBoardPosition >> EditorMsgWrapper)
+                (Dom.getElement "boardDiv")
+            )
 
         LoginSuccess user ->
             ( { model
@@ -554,19 +566,17 @@ updateEditor msg model =
         -- When we register a mouse down event on the board we read the current board position
         -- from the DOM.
         MouseDown event ->
-            ( model
-            , Task.attempt
-                (\res -> EditorMsgWrapper (GotBoardPosition res event))
-                (Dom.getElement "boardDiv")
+            ( { model | drag = startDrag model.rect event }
+            , Cmd.none
             )
 
         MouseMove event ->
-            ( { model | drag = moveDrag event model.drag }, Cmd.none )
+            ( { model | drag = moveDrag model.rect event model.drag }, Cmd.none )
 
         MouseUp event ->
             let
                 drag =
-                    moveDrag event model.drag
+                    moveDrag model.rect event model.drag
             in
             case drag of
                 DragOff ->
@@ -575,16 +585,20 @@ updateEditor msg model =
                 Dragging dragData ->
                     clickRelease dragData.start dragData.current { model | drag = DragOff }
 
-        GotBoardPosition res event ->
-            case res of
+        GotBoardPosition domElement ->
+            case domElement of
                 Ok element ->
-                    ( { model | drag = startDrag element.element event }, Cmd.none )
+                    ( { model | rect = element.element }, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
 
         WindowResize width height ->
-            ( { model | windowSize = ( width, height ) }, Cmd.none )
+            ( { model | windowSize = ( width, height ) }
+            , Task.attempt
+                (GotBoardPosition >> EditorMsgWrapper)
+                (Dom.getElement "boardDiv")
+            )
 
         ToolSelect tool ->
             ( { model | tool = tool }, Cmd.none )
