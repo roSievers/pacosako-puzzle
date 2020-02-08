@@ -216,17 +216,6 @@ initSmartTool =
     }
 
 
-type ToolInputMsg
-    = ToolClick Tile
-    | ToolDeselect
-    | ToolHover (Maybe Tile)
-    | ToolDelete
-    | ToolAdd Sako.Color Sako.Type
-    | ToolStartDrag SvgCoord Tile
-    | ToolDrag SvgCoord SvgCoord
-    | ToolStopDrag Tile Tile
-
-
 type ToolOutputMsg
     = ToolNoOp -- Don't do anything.
     | ToolCommit PacoPosition -- Add state to history.
@@ -423,7 +412,7 @@ type EditorMsg
     | GotRandomPosition PacoPosition
     | RequestAnalysePosition PacoPosition
     | GotAnalysePosition AnalysisReport
-    | ExternalToolMsg ToolInputMsg
+    | ToolAddPiece Sako.Color Sako.Type
 
 
 type BlogEditorMsg
@@ -670,7 +659,7 @@ updateEditor msg model =
             in
             case maybeTile of
                 Just tile ->
-                    clickStart dragData.start tile { model | drag = Dragging dragData }
+                    clickStart tile { model | drag = Dragging dragData }
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -791,13 +780,9 @@ updateEditor msg model =
         GotAnalysePosition analysis ->
             ( { model | analysis = Just analysis }, Cmd.none )
 
-        ExternalToolMsg toolMsg ->
-            let
-                ( newTool, outMsg ) =
-                    updateSmartTool (P.getC model.game) toolMsg model.smartTool
-            in
-            handleToolOutputMsg outMsg
-                { model | smartTool = newTool }
+        ToolAddPiece color pieceType ->
+            updateSmartToolAdd (P.getC model.game) color pieceType
+                |> liftToolUpdate model
 
 
 editorStateModify : EditorModel -> EditorModel
@@ -853,7 +838,7 @@ regularKeyUp key model =
         "Delete" ->
             let
                 ( newTool, outMsg ) =
-                    updateSmartTool (P.getC model.game) ToolDelete model.smartTool
+                    updateSmartToolDelete (P.getC model.game) model.smartTool
             in
             handleToolOutputMsg outMsg
                 { model | smartTool = newTool }
@@ -862,15 +847,10 @@ regularKeyUp key model =
             ( model, Cmd.none )
 
 
-clickStart : SvgCoord -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
-clickStart down downTile model =
-    let
-        ( newTool, outMsg ) =
-            updateSmartTool (P.getC model.game)
-                (ToolStartDrag down downTile)
-                model.smartTool
-    in
-    handleToolOutputMsg outMsg { model | smartTool = newTool }
+clickStart : Tile -> EditorModel -> ( EditorModel, Cmd Msg )
+clickStart downTile model =
+    updateSmartToolStartDrag (P.getC model.game) downTile
+        |> liftToolUpdate model
 
 
 clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -880,25 +860,54 @@ clickRelease down up model =
 
 smartToolRelease : Maybe Tile -> Maybe Tile -> EditorModel -> ( EditorModel, Cmd Msg )
 smartToolRelease down up model =
-    let
-        inMsg =
-            if down == up then
-                case up of
-                    Just clickedTileCoordinate ->
-                        ToolClick clickedTileCoordinate
-
-                    Nothing ->
-                        ToolDeselect
+    case ( down, up ) of
+        ( Just oldTileCoordinate, Just clickedTileCoordinate ) ->
+            if oldTileCoordinate == clickedTileCoordinate then
+                updateSmartToolClick (P.getC model.game) clickedTileCoordinate
+                    |> liftToolUpdate model
 
             else
-                Maybe.map2 ToolStopDrag down up
-                    |> Maybe.withDefault
-                        ToolDeselect
+                updateSmartToolStopDrag (P.getC model.game) oldTileCoordinate clickedTileCoordinate
+                    |> liftToolUpdate model
 
+        _ ->
+            liftToolUpdate model updateSmartToolDeselect
+
+
+liftToolUpdate : EditorModel -> (SmartToolModel -> ( SmartToolModel, ToolOutputMsg )) -> ( EditorModel, Cmd Msg )
+liftToolUpdate model toolUpdate =
+    let
         ( newTool, outMsg ) =
-            updateSmartTool (P.getC model.game) inMsg model.smartTool
+            toolUpdate model.smartTool
     in
-    handleToolOutputMsg outMsg { model | smartTool = newTool }
+    case outMsg of
+        ToolNoOp ->
+            ( { model | smartTool = newTool }, Cmd.none )
+
+        ToolCommit position ->
+            ( { model
+                | game = addHistoryState position model.game
+                , preview = Nothing
+                , smartTool = newTool
+              }
+            , Cmd.none
+            )
+
+        ToolPreview preview ->
+            ( { model
+                | preview = Just preview
+                , smartTool = newTool
+              }
+            , Cmd.none
+            )
+
+        ToolRollback ->
+            ( { model
+                | preview = Nothing
+                , smartTool = newTool
+              }
+            , Cmd.none
+            )
 
 
 handleToolOutputMsg : ToolOutputMsg -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -924,36 +933,27 @@ handleToolOutputMsg msg model =
 
 handleMouseMove : Mouse.Event -> EditorModel -> ( EditorModel, Cmd Msg )
 handleMouseMove event model =
+    let
+        gameSpacePos =
+            gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+    in
     case model.drag of
         -- Moving the mouse when it is not held down.
         DragOff ->
-            let
-                gameSpacePos =
-                    gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
-
-                ( newTool, outMsg ) =
-                    updateSmartTool (P.getC model.game) (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
-            in
-            handleToolOutputMsg outMsg { model | smartTool = newTool }
+            liftToolUpdate model
+                (updateSmartToolHover (P.getC model.game) (safeTileCoordinate gameSpacePos))
 
         --Moving the mouse when it is held down.
         Dragging { start } ->
-            let
-                gameSpacePos =
-                    gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
+            liftToolUpdate
+                { model | drag = Dragging { start = start, current = gameSpacePos } }
+                (updateSmartToolContinueDrag start gameSpacePos)
 
-                ( newTool, outMsg ) =
-                    updateSmartTool (P.getC model.game) (ToolDrag start gameSpacePos) model.smartTool
-            in
-            handleToolOutputMsg outMsg
-                { model
-                    | smartTool = newTool
-                    , drag =
-                        Dragging
-                            { start = start
-                            , current = gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
-                            }
-                }
+
+
+--------------------------------------------------------------------------------
+-- Editor > Smart Tool methods -------------------------------------------------
+--------------------------------------------------------------------------------
 
 
 moveDrag : Rect -> Mouse.Event -> DragState -> DragState
@@ -1183,34 +1183,6 @@ updateSmartToolStopDrag position startTile targetTile model =
             ( smartToolRemoveDragInfo { model | highlight = Nothing }
             , ToolRollback
             )
-
-
-updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
-updateSmartTool position msg model =
-    case msg of
-        ToolClick tile ->
-            updateSmartToolClick position tile model
-
-        ToolHover maybeTile ->
-            updateSmartToolHover position maybeTile model
-
-        ToolDeselect ->
-            updateSmartToolDeselect model
-
-        ToolDelete ->
-            updateSmartToolDelete position model
-
-        ToolAdd color pieceType ->
-            updateSmartToolAdd position color pieceType model
-
-        ToolStartDrag _ startTile ->
-            updateSmartToolStartDrag position startTile model
-
-        ToolDrag beginDrag endDrag ->
-            updateSmartToolContinueDrag beginDrag endDrag model
-
-        ToolStopDrag startTile targetTile ->
-            updateSmartToolStopDrag position startTile targetTile model
 
 
 updateSmartToolSelection : PacoPosition -> Tile -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
@@ -1626,7 +1598,7 @@ toolDecoration model =
 
 
 --------------------------------------------------------------------------------
--- Sidebar view ----------------------------------------------------------------
+-- Editor > Sidebar view -------------------------------------------------------
 --------------------------------------------------------------------------------
 
 
@@ -1738,7 +1710,7 @@ singleAddPieceButton hasHighlight color pieceType buttonIcon =
     let
         onPress =
             if hasHighlight then
-                Just (ExternalToolMsg (ToolAdd color pieceType))
+                Just (ToolAddPiece color pieceType)
 
             else
                 Nothing
