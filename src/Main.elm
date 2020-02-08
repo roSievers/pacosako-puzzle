@@ -170,6 +170,11 @@ type ToolInputMsg
     | ToolHover (Maybe Tile)
 
 
+type ToolOutputMsg
+    = ToolNoOp -- Don't do anything.
+    | ToolCommit PacoPosition -- Add state to history.
+
+
 type BoardDecoration
     = HighlightTile Tile
     | DropTarget Tile
@@ -813,24 +818,39 @@ clickRelease down up model =
             createToolRelease (tileCoordinate down) (tileCoordinate up) model
 
         SmartTool ->
-            if safeTileCoordinate down == safeTileCoordinate up then
-                case safeTileCoordinate up of
-                    Just clickedTileCoordinate ->
-                        ( { model
-                            | smartTool = updateSmartTool (ToolClick clickedTileCoordinate) model.smartTool
-                          }
-                        , Cmd.none
-                        )
+            smartToolRelease (safeTileCoordinate down) (safeTileCoordinate up) model
 
-                    Nothing ->
-                        ( { model
-                            | smartTool = updateSmartTool ToolDeselect model.smartTool
-                          }
-                        , Cmd.none
-                        )
 
-            else
-                ( model, Cmd.none )
+smartToolRelease : Maybe Tile -> Maybe Tile -> EditorModel -> ( EditorModel, Cmd Msg )
+smartToolRelease down up model =
+    if down == up then
+        case up of
+            Just clickedTileCoordinate ->
+                let
+                    ( newTool, outMsg ) =
+                        updateSmartTool (P.getC model.game) (ToolClick clickedTileCoordinate) model.smartTool
+                in
+                handleToolOutputMsg outMsg { model | smartTool = newTool }
+
+            Nothing ->
+                let
+                    ( newTool, outMsg ) =
+                        updateSmartTool (P.getC model.game) ToolDeselect model.smartTool
+                in
+                handleToolOutputMsg outMsg { model | smartTool = newTool }
+
+    else
+        ( model, Cmd.none )
+
+
+handleToolOutputMsg : ToolOutputMsg -> EditorModel -> ( EditorModel, Cmd Msg )
+handleToolOutputMsg msg model =
+    case msg of
+        ToolNoOp ->
+            ( model, Cmd.none )
+
+        ToolCommit position ->
+            ( { model | game = addHistoryState position model.game }, Cmd.none )
 
 
 handleMouseMove : Mouse.Event -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -844,10 +864,10 @@ handleMouseMove event model =
                         gameSpacePos =
                             gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
 
-                        newTool =
-                            updateSmartTool (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
+                        ( newTool, outMsg ) =
+                            updateSmartTool (P.getC model.game) (ToolHover (safeTileCoordinate gameSpacePos)) model.smartTool
                     in
-                    ( { model | smartTool = newTool }, Cmd.none )
+                    handleToolOutputMsg outMsg { model | smartTool = newTool }
 
                 _ ->
                     ( model, Cmd.none )
@@ -878,51 +898,71 @@ moveDrag rect event drag =
                 }
 
 
-updateSmartTool : ToolInputMsg -> SmartToolModel -> SmartToolModel
-updateSmartTool msg model =
+updateSmartTool : PacoPosition -> ToolInputMsg -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartTool position msg model =
     case msg of
         ToolClick tile ->
-            if model.highlight == Just tile then
-                { model | highlight = Nothing }
+            case model.highlight of
+                Just highlight ->
+                    if highlight == tile then
+                        -- Clicking the same tile again deselects
+                        ( { model | highlight = Nothing }, ToolNoOp )
 
-            else
-                { model | highlight = Just tile }
+                    else
+                        let
+                            sourcePieces =
+                                List.filter (Sako.isAt highlight) position.pieces
+
+                            involvedPieces =
+                                List.filter (\p -> Sako.isAt highlight p || Sako.isAt tile p) position.pieces
+
+                            ( whiteCount, blackCount ) =
+                                ( List.count (Sako.isColor Sako.White) involvedPieces
+                                , List.count (Sako.isColor Sako.Black) involvedPieces
+                                )
+
+                            moveBlocked =
+                                whiteCount > 1 || blackCount > 1
+
+                            newPosition =
+                                { position | pieces = List.map (Sako.movePieceConditional highlight tile) position.pieces }
+                        in
+                        if sourcePieces == [] then
+                            ( { model | highlight = Just tile }, ToolNoOp )
+
+                        else if moveBlocked then
+                            ( { model | highlight = Nothing }, ToolNoOp )
+
+                        else
+                            ( { model | highlight = Nothing }, ToolCommit newPosition )
+
+                Nothing ->
+                    ( { model | highlight = Just tile }, ToolNoOp )
 
         ToolHover maybeTile ->
-            if model.highlight == maybeTile || model.highlight == Nothing then
-                { model | hover = Nothing }
+            -- To show a hover marker, we need both a highlighted tile and a
+            -- hovered tile. Otherwise we don't do anything at all.
+            Maybe.map2
+                (\highlight hover ->
+                    if highlight == hover then
+                        -- We don't show a hover marker if we are above the
+                        -- highlighted tile.
+                        ( { model | hover = Nothing }, ToolNoOp )
 
-            else
-                { model | hover = maybeTile }
+                    else if List.all (\p -> p.position /= highlight) position.pieces then
+                        -- If the highlight position is empty, then we don't show
+                        -- a highlighted tile either.
+                        ( { model | hover = Nothing }, ToolNoOp )
+
+                    else
+                        ( { model | hover = Just hover }, ToolNoOp )
+                )
+                model.highlight
+                maybeTile
+                |> Maybe.withDefault ( { model | hover = Nothing }, ToolNoOp )
 
         ToolDeselect ->
-            { model | highlight = Nothing }
-
-
-deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
-deleteToolRelease down up model =
-    let
-        oldPosition =
-            P.getC model.game
-
-        pieces =
-            List.filter
-                (\p -> p.position /= up || not (colorFilter model.deleteToolColor p))
-                oldPosition.pieces
-
-        newHistory =
-            addHistoryState { oldPosition | pieces = pieces } model.game
-    in
-    if up == down then
-        ( { model
-            | game = newHistory
-          }
-            |> editorStateModify
-        , Cmd.none
-        )
-
-    else
-        ( model, Cmd.none )
+            ( { model | highlight = Nothing }, ToolNoOp )
 
 
 moveToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -955,6 +995,32 @@ moveToolRelease down up model =
     if whiteCount <= 1 && blackCount <= 1 then
         ( { model
             | game = newHistory ()
+          }
+            |> editorStateModify
+        , Cmd.none
+        )
+
+    else
+        ( model, Cmd.none )
+
+
+deleteToolRelease : Tile -> Tile -> EditorModel -> ( EditorModel, Cmd Msg )
+deleteToolRelease down up model =
+    let
+        oldPosition =
+            P.getC model.game
+
+        pieces =
+            List.filter
+                (\p -> p.position /= up || not (colorFilter model.deleteToolColor p))
+                oldPosition.pieces
+
+        newHistory =
+            addHistoryState { oldPosition | pieces = pieces } model.game
+    in
+    if up == down then
+        ( { model
+            | game = newHistory
           }
             |> editorStateModify
         , Cmd.none

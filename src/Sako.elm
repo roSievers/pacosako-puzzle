@@ -7,6 +7,9 @@ module Sako exposing
     , exportExchangeNotation
     , importExchangeNotation
     , importExchangeNotationList
+    , isAt
+    , isColor
+    , movePieceConditional
     , tileX
     , tileY
     )
@@ -59,6 +62,25 @@ type alias PacoPiece =
     , color : Color
     , position : Tile
     }
+
+
+movePieceConditional : Tile -> Tile -> PacoPiece -> PacoPiece
+movePieceConditional source target piece =
+    if piece.position == source then
+        { piece | position = target }
+
+    else
+        piece
+
+
+isAt : Tile -> PacoPiece -> Bool
+isAt tile piece =
+    piece.position == tile
+
+
+isColor : Color -> PacoPiece -> Bool
+isColor color piece =
+    piece.color == color
 
 
 pacoPiece : Color -> Type -> Tile -> PacoPiece
