@@ -17,6 +17,68 @@
     </canvas>
     <div id="elm"></div>
     <script>
+      // Set up a new mutation observer, that will fire custom events for all
+      // svg elements when there is a click event or a motion event.
+      // The coordinates will be automatically transformed into SVG local
+      // coordinates. Code by Ben Hanna and Atle Wee Førre.
+      // https://discourse.elm-lang.org/t/custom-elements-extend-svg-real-coordinates-on-mouse-events/1762
+      // https://ellie-app.com/3bmhDwTcdTZa1
+
+      // This version has been heavily modified to account for multiple nodes
+      // being added to the DOM at the same time, with the svg node not being
+      // added directly. The Elm side has also been modified, to deal with
+      // Float coordinates.
+
+      function getSvgCoord(event) {
+        svg = event.currentTarget;
+
+        point = svg.createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        return point.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === "childList") {
+            console.log(mutation.addedNodes);
+            Array.from(mutation.addedNodes)
+              .flatMap(tag =>
+                tag.getElementsByTagName
+                  ? Array.from(tag.getElementsByTagName("svg"))
+                  : new Array()
+              )
+              .filter(function(node) {
+                return node.tagName === "svg";
+              })
+              .forEach(function(node) {
+                node.addEventListener("mousedown", function(event) {
+                  var svgClickEvent = new CustomEvent("svgdown", {
+                    detail: getSvgCoord(event)
+                  });
+                  event.currentTarget.dispatchEvent(svgClickEvent);
+                });
+
+                node.addEventListener("mousemove", function(event) {
+                  var svgClickEvent = new CustomEvent("svgmove", {
+                    detail: getSvgCoord(event)
+                  });
+                  event.currentTarget.dispatchEvent(svgClickEvent);
+                });
+
+                node.addEventListener("mouseup", function(event) {
+                  var svgClickEvent = new CustomEvent("svgup", {
+                    detail: getSvgCoord(event)
+                  });
+                  event.currentTarget.dispatchEvent(svgClickEvent);
+                });
+              });
+          }
+        });
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+
       // Pass the window size to elm on init. This way we already know it on startup.
       let windowSize = { width: window.innerWidth, height: window.innerHeight };
       var app = Elm.Main.init({
@@ -79,6 +141,10 @@
         /// create a "fake" click-event to trigger the download
         if (document.createEvent) {
           e = document.createEvent("MouseEvents");
+          /// This is deprecated, there is probably a better way to do this now.
+          /// https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/initMouseEvent
+          /// Hopefully, the other way also has a better format when run through
+          /// the Prettier formatter.
           e.initMouseEvent(
             "click",
             true,

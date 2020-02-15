@@ -17,7 +17,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse as Mouse
 import Http
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
@@ -30,6 +30,7 @@ import Sako exposing (PacoPiece, Tile(..))
 import StaticText
 import Svg exposing (Svg)
 import Svg.Attributes
+import Svg.Events
 import Task
 
 
@@ -308,58 +309,8 @@ emptyPosition =
     }
 
 
-type DragState
-    = DragOff
-    | Dragging { start : SvgCoord, current : SvgCoord }
-
-
-startDrag : Rect -> Mouse.Event -> { start : SvgCoord, current : SvgCoord }
-startDrag rect event =
-    let
-        start =
-            gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
-    in
-    { start = start
-    , current = start
-    }
-
-
-relativeInside : Rect -> ( Float, Float ) -> ( Float, Float )
-relativeInside rect ( x, y ) =
-    ( (x - rect.x) / rect.width, (y - rect.y) / rect.height )
-
-
-absoluteOutside : Rect -> ( Float, Float ) -> ( Float, Float )
-absoluteOutside rect ( x, y ) =
-    ( x * rect.width + rect.x, y * rect.height + rect.y )
-
-
-roundTuple : ( Float, Float ) -> ( Int, Int )
-roundTuple ( x, y ) =
-    ( round x, round y )
-
-
-{-| Transforms a screen space coordinate into a Svg coordinate.
--}
-gameSpaceCoordinate : Rect -> Rect -> ( Float, Float ) -> SvgCoord
-gameSpaceCoordinate elementRect gameView coord =
-    coord
-        |> relativeInside elementRect
-        |> absoluteOutside gameView
-        |> roundTuple
-        |> (\( x, y ) -> SvgCoord x y)
-
-
-{-| Transforms an Svg coordinate into a logical tile coordinte.
-Returns Nothing, if the SvgCoordinate is outside the board.
--}
-safeTileCoordinate : SvgCoord -> Maybe Tile
-safeTileCoordinate (SvgCoord x y) =
-    if 0 <= x && x < 800 && 0 <= y && y < 800 then
-        Just (Tile (x // 100) (7 - y // 100))
-
-    else
-        Nothing
+type alias DragState =
+    Maybe { start : BoardMousePosition, current : BoardMousePosition }
 
 
 type alias Rect =
@@ -391,9 +342,9 @@ type Msg
 -}
 type EditorMsg
     = EditorMsgNoOp
-    | MouseDown Mouse.Event
-    | MouseMove Mouse.Event
-    | MouseUp Mouse.Event
+    | MouseDown BoardMousePosition
+    | MouseMove BoardMousePosition
+    | MouseUp BoardMousePosition
     | GotBoardPosition (Result Dom.Error Dom.Element)
     | WindowResize Int Int
     | Undo
@@ -413,6 +364,40 @@ type EditorMsg
     | RequestAnalysePosition PacoPosition
     | GotAnalysePosition AnalysisReport
     | ToolAddPiece Sako.Color Sako.Type
+
+
+type alias BoardMousePosition =
+    { x : Int
+    , y : Int
+    , tile : Maybe Tile
+    }
+
+
+boardMousePosition : Float -> Float -> BoardMousePosition
+boardMousePosition x y =
+    { x = round x
+    , y = round y
+    , tile = safeTileCoordinate (SvgCoord (round x) (round y))
+    }
+
+
+{-| Transforms an Svg coordinate into a logical tile coordinte.
+Returns Nothing, if the SvgCoordinate is outside the board.
+-}
+safeTileCoordinate : SvgCoord -> Maybe Tile
+safeTileCoordinate (SvgCoord x y) =
+    if 0 <= x && x < 800 && 0 <= y && y < 800 then
+        Just (Tile (x // 100) (7 - y // 100))
+
+    else
+        Nothing
+
+
+decodeBoardMousePosition : Decoder BoardMousePosition
+decodeBoardMousePosition =
+    Decode.map2 boardMousePosition
+        (Decode.at [ "detail", "x" ] Decode.float)
+        (Decode.at [ "detail", "y" ] Decode.float)
 
 
 type BlogEditorMsg
@@ -454,7 +439,7 @@ initialEditor flags =
     { saveState = SaveNotRequired
     , game = P.singleton initialPosition
     , preview = Nothing
-    , drag = DragOff
+    , drag = Nothing
     , windowSize = parseWindowSize flags
     , userPaste = ""
     , pasteParsed = NoInput
@@ -647,37 +632,32 @@ updateEditor msg model =
         EditorMsgNoOp ->
             ( model, Cmd.none )
 
-        -- When we register a mouse down event on the board we read the current board position
-        -- from the DOM.
-        MouseDown event ->
+        MouseDown mouse ->
             let
                 dragData =
-                    startDrag model.rect event
-
-                maybeTile =
-                    safeTileCoordinate dragData.start
+                    { start = mouse, current = mouse }
             in
-            case maybeTile of
+            case mouse.tile of
                 Just tile ->
-                    clickStart tile { model | drag = Dragging dragData }
+                    clickStart tile { model | drag = Just dragData }
 
                 Nothing ->
                     ( model, Cmd.none )
 
-        MouseMove event ->
-            handleMouseMove event model
+        MouseMove mouse ->
+            handleMouseMove mouse model
 
-        MouseUp event ->
+        MouseUp mouse ->
             let
                 drag =
-                    moveDrag model.rect event model.drag
+                    moveDrag mouse model.drag
             in
             case drag of
-                DragOff ->
-                    ( { model | drag = DragOff }, Cmd.none )
+                Nothing ->
+                    ( { model | drag = Nothing }, Cmd.none )
 
-                Dragging dragData ->
-                    clickRelease dragData.start dragData.current { model | drag = DragOff }
+                Just dragData ->
+                    clickRelease dragData.start dragData.current { model | drag = Nothing }
 
         GotBoardPosition domElement ->
             case domElement of
@@ -853,9 +833,9 @@ clickStart downTile model =
         |> liftToolUpdate model
 
 
-clickRelease : SvgCoord -> SvgCoord -> EditorModel -> ( EditorModel, Cmd Msg )
+clickRelease : BoardMousePosition -> BoardMousePosition -> EditorModel -> ( EditorModel, Cmd Msg )
 clickRelease down up model =
-    smartToolRelease (safeTileCoordinate down) (safeTileCoordinate up) model
+    smartToolRelease down.tile up.tile model
 
 
 smartToolRelease : Maybe Tile -> Maybe Tile -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -931,23 +911,19 @@ handleToolOutputMsg msg model =
             ( { model | preview = Nothing }, Cmd.none )
 
 
-handleMouseMove : Mouse.Event -> EditorModel -> ( EditorModel, Cmd Msg )
-handleMouseMove event model =
-    let
-        gameSpacePos =
-            gameSpaceCoordinate model.rect (realizedBoardViewBox ShowNumbers) event.clientPos
-    in
+handleMouseMove : BoardMousePosition -> EditorModel -> ( EditorModel, Cmd Msg )
+handleMouseMove mouse model =
     case model.drag of
         -- Moving the mouse when it is not held down.
-        DragOff ->
+        Nothing ->
             liftToolUpdate model
-                (updateSmartToolHover (P.getC model.game) (safeTileCoordinate gameSpacePos))
+                (updateSmartToolHover (P.getC model.game) mouse.tile)
 
         --Moving the mouse when it is held down.
-        Dragging { start } ->
+        Just { start } ->
             liftToolUpdate
-                { model | drag = Dragging { start = start, current = gameSpacePos } }
-                (updateSmartToolContinueDrag start gameSpacePos)
+                { model | drag = moveDrag mouse model.drag }
+                (updateSmartToolContinueDrag start mouse)
 
 
 
@@ -956,17 +932,13 @@ handleMouseMove event model =
 --------------------------------------------------------------------------------
 
 
-moveDrag : Rect -> Mouse.Event -> DragState -> DragState
-moveDrag rect event drag =
-    case drag of
-        DragOff ->
-            DragOff
-
-        Dragging { start } ->
-            Dragging
-                { start = start
-                , current = gameSpaceCoordinate rect (realizedBoardViewBox ShowNumbers) event.clientPos
-                }
+moveDrag : BoardMousePosition -> DragState -> DragState
+moveDrag current drag =
+    Maybe.map
+        (\dragData ->
+            { start = dragData.start, current = current }
+        )
+        drag
 
 
 pieceHighlighted : Tile -> Highlight -> PacoPiece -> Bool
@@ -1151,9 +1123,9 @@ updateSmartToolStartDrag position startTile model =
     )
 
 
-updateSmartToolContinueDrag : SvgCoord -> SvgCoord -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
-updateSmartToolContinueDrag (SvgCoord ax ay) (SvgCoord bx by) model =
-    ( { model | dragDelta = Just (SvgCoord (bx - ax) (by - ay)) }
+updateSmartToolContinueDrag : BoardMousePosition -> BoardMousePosition -> SmartToolModel -> ( SmartToolModel, ToolOutputMsg )
+updateSmartToolContinueDrag aPos bPos model =
+    ( { model | dragDelta = Just (SvgCoord (bPos.x - aPos.x) (bPos.y - aPos.y)) }
     , ToolNoOp
     )
 
@@ -1470,10 +1442,11 @@ loadPositionPreview taco position =
                     { position = position
                     , colorScheme = taco.colorScheme
                     , sideLength = 250
-                    , drag = DragOff
+                    , drag = Nothing
                     , viewMode = CleanBoard
                     , nodeId = Nothing
                     , decoration = []
+                    , withEvents = False
                     }
                 )
                 |> Element.map EditorMsgWrapper
@@ -1546,10 +1519,7 @@ positionView taco editor drag =
         (Element.el [ centerX, centerY ]
             (Element.html
                 (Html.div
-                    [ Mouse.onDown MouseDown
-                    , Mouse.onMove MouseMove
-                    , Mouse.onUp MouseUp
-                    , Html.Attributes.id "boardDiv"
+                    [ Html.Attributes.id "boardDiv"
                     ]
                     [ positionSvg taco
                         { position =
@@ -1560,6 +1530,7 @@ positionView taco editor drag =
                         , viewMode = editor.viewMode
                         , nodeId = Just sakoEditorId
                         , decoration = toolDecoration editor
+                        , withEvents = True
                         }
                     ]
                 )
@@ -1840,25 +1811,6 @@ boardViewBox viewMode =
             }
 
 
-{-| The svg showing the game board is a square. The viewport does not need to be a square.
-The browser then centers the requested viewport inside the realized viewport. This function
-calculates the rectangle used for the realized viewport in order to transform coordinates.
-
-Assumes, that height > width for boardViewBox.
-
--}
-realizedBoardViewBox : ViewMode -> Rect
-realizedBoardViewBox viewMode =
-    let
-        rect =
-            boardViewBox viewMode
-    in
-    { rect
-        | x = rect.x - (rect.height - rect.width) / 2
-        , width = rect.height
-    }
-
-
 viewBox : Rect -> Svg.Attribute msg
 viewBox rect =
     String.join
@@ -1876,10 +1828,6 @@ sakoEditorId =
     "sako-editor"
 
 
-
---positionSvg : Pieces.ColorScheme -> Int -> PacoPosition -> DragState -> Html Msg
-
-
 positionSvg :
     Taco
     ->
@@ -1890,6 +1838,7 @@ positionSvg :
         , viewMode : ViewMode
         , nodeId : Maybe String
         , decoration : List BoardDecoration
+        , withEvents : Bool
         }
     -> Html EditorMsg
 positionSvg taco config =
@@ -1902,11 +1851,22 @@ positionSvg taco config =
                 Nothing ->
                     []
 
+        events =
+            if config.withEvents then
+                [ Svg.Events.on "svgdown" (Decode.map MouseDown decodeBoardMousePosition)
+                , Svg.Events.on "svgmove" (Decode.map MouseMove decodeBoardMousePosition)
+                , Svg.Events.on "svgup" (Decode.map MouseUp decodeBoardMousePosition)
+                ]
+
+            else
+                []
+
         attributes =
             [ Svg.Attributes.width <| String.fromInt config.sideLength
             , Svg.Attributes.height <| String.fromInt config.sideLength
             , viewBox (boardViewBox config.viewMode)
             ]
+                ++ events
                 ++ idAttribute
     in
     Svg.svg attributes
@@ -2164,10 +2124,11 @@ parsedMarkdownPaste taco model =
                                 { position = pacoPosition
                                 , colorScheme = taco.colorScheme
                                 , sideLength = 100
-                                , drag = DragOff
+                                , drag = Nothing
                                 , viewMode = CleanBoard
                                 , nodeId = Nothing
                                 , decoration = []
+                                , withEvents = False
                                 }
                             )
                         , Element.text "Load"
