@@ -8,6 +8,7 @@ import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region
+import EventsCustom as Events exposing (BoardMousePosition)
 import File.Download
 import FontAwesome.Icon exposing (Icon, viewIcon)
 import FontAwesome.Regular as Regular
@@ -15,9 +16,8 @@ import FontAwesome.Solid as Solid
 import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events.Extra.Mouse as Mouse
 import Http
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
 import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
@@ -30,7 +30,6 @@ import Sako exposing (PacoPiece, Tile(..))
 import StaticText
 import Svg exposing (Svg)
 import Svg.Attributes
-import Svg.Events
 import Task
 
 
@@ -310,7 +309,10 @@ emptyPosition =
 
 
 type alias DragState =
-    Maybe { start : BoardMousePosition, current : BoardMousePosition }
+    Maybe
+        { start : BoardMousePosition
+        , current : BoardMousePosition
+        }
 
 
 type alias Rect =
@@ -364,40 +366,6 @@ type EditorMsg
     | RequestAnalysePosition PacoPosition
     | GotAnalysePosition AnalysisReport
     | ToolAddPiece Sako.Color Sako.Type
-
-
-type alias BoardMousePosition =
-    { x : Int
-    , y : Int
-    , tile : Maybe Tile
-    }
-
-
-boardMousePosition : Float -> Float -> BoardMousePosition
-boardMousePosition x y =
-    { x = round x
-    , y = round y
-    , tile = safeTileCoordinate (SvgCoord (round x) (round y))
-    }
-
-
-{-| Transforms an Svg coordinate into a logical tile coordinte.
-Returns Nothing, if the SvgCoordinate is outside the board.
--}
-safeTileCoordinate : SvgCoord -> Maybe Tile
-safeTileCoordinate (SvgCoord x y) =
-    if 0 <= x && x < 800 && 0 <= y && y < 800 then
-        Just (Tile (x // 100) (7 - y // 100))
-
-    else
-        Nothing
-
-
-decodeBoardMousePosition : Decoder BoardMousePosition
-decodeBoardMousePosition =
-    Decode.map2 boardMousePosition
-        (Decode.at [ "detail", "x" ] Decode.float)
-        (Decode.at [ "detail", "y" ] Decode.float)
 
 
 type BlogEditorMsg
@@ -1853,9 +1821,9 @@ positionSvg taco config =
 
         events =
             if config.withEvents then
-                [ Svg.Events.on "svgdown" (Decode.map MouseDown decodeBoardMousePosition)
-                , Svg.Events.on "svgmove" (Decode.map MouseMove decodeBoardMousePosition)
-                , Svg.Events.on "svgup" (Decode.map MouseUp decodeBoardMousePosition)
+                [ Events.svgDown MouseDown
+                , Events.svgMove MouseMove
+                , Events.svgUp MouseUp
                 ]
 
             else

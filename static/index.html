@@ -38,10 +38,19 @@
         return point.matrixTransform(svg.getScreenCTM().inverse());
       }
 
+      function mapMouseEvent(node, realName, customName) {
+        node.addEventListener(realName, function(event) {
+          var svgClickEvent = new CustomEvent(customName, {
+            detail: getSvgCoord(event)
+          });
+          event.currentTarget.dispatchEvent(svgClickEvent);
+        });
+      }
+
       var observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
           if (mutation.type === "childList") {
-            console.log(mutation.addedNodes);
+            // Find all svg tags, then add event mappers.
             Array.from(mutation.addedNodes)
               .flatMap(tag =>
                 tag.getElementsByTagName
@@ -52,26 +61,9 @@
                 return node.tagName === "svg";
               })
               .forEach(function(node) {
-                node.addEventListener("mousedown", function(event) {
-                  var svgClickEvent = new CustomEvent("svgdown", {
-                    detail: getSvgCoord(event)
-                  });
-                  event.currentTarget.dispatchEvent(svgClickEvent);
-                });
-
-                node.addEventListener("mousemove", function(event) {
-                  var svgClickEvent = new CustomEvent("svgmove", {
-                    detail: getSvgCoord(event)
-                  });
-                  event.currentTarget.dispatchEvent(svgClickEvent);
-                });
-
-                node.addEventListener("mouseup", function(event) {
-                  var svgClickEvent = new CustomEvent("svgup", {
-                    detail: getSvgCoord(event)
-                  });
-                  event.currentTarget.dispatchEvent(svgClickEvent);
-                });
+                mapMouseEvent(node, "mousedown", "svgdown");
+                mapMouseEvent(node, "mousemove", "svgmove");
+                mapMouseEvent(node, "mouseup", "svgup");
               });
           }
         });
