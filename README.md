@@ -2,13 +2,15 @@
 
 Paco Ŝako puzzle and game analysis frontend written as an Elm SPA without any backend.
 
-## Running 
-
-    # When running without backend
-    elm-live src/Main.elm --start-page static/index.html -- --output=elm.js
+## Running
 
     # When attached to a backend
     elm-live src/Main.elm --no-server -- --output=elm.js
+
+## Development
+
+Elm code must be formated with [Elm Format](https://github.com/avh4/elm-format),
+html and javascript must be formated with [Prettier](https://prettier.io/).
 
 ## License
 
