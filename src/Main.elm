@@ -5,6 +5,7 @@ import Browser.Dom as Dom
 import Browser.Events
 import Element exposing (Element, centerX, centerY, fill, height, padding, spacing, width)
 import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region
@@ -2159,8 +2160,8 @@ markdownView taco content =
         |> Result.andThen (Markdown.Parser.render (renderer taco))
 
 
-codeBlock : Taco -> { body : String, language : Maybe String } -> Element Msg
-codeBlock taco details =
+puzzleBlock : Taco -> { body : String, language : Maybe String } -> Element Msg
+puzzleBlock taco details =
     case Sako.importExchangeNotationList details.body of
         Err _ ->
             Element.text "There is an error in the position notation :-("
@@ -2221,9 +2222,18 @@ renderer taco =
                                 ]
                         )
                 )
-    , codeBlock = codeBlock taco
-    , html = Markdown.Html.oneOf []
+    , codeBlock = codeBlock
+    , html = htmlRenderer taco
     }
+
+
+htmlRenderer : Taco -> Markdown.Html.Renderer (List (Element Msg) -> Element Msg)
+htmlRenderer taco =
+    Markdown.Html.tag "puzzle"
+        (\data _ ->
+            puzzleBlock taco { body = data, language = Nothing }
+        )
+        |> Markdown.Html.withAttribute "data"
 
 
 heading : { level : Int, rawText : String, children : List (Element msg) } -> Element msg
@@ -2261,7 +2271,36 @@ rawTextToId rawText =
 
 code : String -> Element msg
 code snippet =
-    Element.text snippet
+    Element.el
+        [ Background.color
+            (Element.rgba 0 0 0 0.04)
+        , Border.rounded 2
+        , Element.paddingXY 5 3
+        , Font.family
+            [ Font.external
+                { url = "https://fonts.googleapis.com/css?family=Source+Code+Pro"
+                , name = "Source Code Pro"
+                }
+            ]
+        ]
+        (Element.text snippet)
+
+
+codeBlock : { body : String, language : Maybe String } -> Element msg
+codeBlock details =
+    Element.el
+        [ Background.color (Element.rgba 0 0 0 0.03)
+        , Element.htmlAttribute (Html.Attributes.style "white-space" "pre")
+        , Element.padding 20
+        , Element.width Element.fill
+        , Font.family
+            [ Font.external
+                { url = "https://fonts.googleapis.com/css?family=Source+Code+Pro"
+                , name = "Source Code Pro"
+                }
+            ]
+        ]
+        (Element.text details.body)
 
 
 

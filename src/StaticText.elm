@@ -11,16 +11,14 @@ Paco Ŝako is a new form of chess created to be an expression of peace, friendsh
 
 The Feature that is currently best developed is the position editor. Here you can arrange Paco Ŝako pieces as you please and export the result as an image. You can download it as a png file for easy sharing, or download a raw SVG file that you can edit later.
 
-```
-.. .K .. .. .. .. BP ..
+<puzzle data=".. .K .. .. .. .. BP ..
 PN .. N. .. PP .. .. ..
 .P .. RP .. .. NQ .. ..
 .. .. .B BR P. QN PB ..
 RP K. P. .. .P .. .. ..
 P. P. .. .. .. .P .. ..
 .. .. .P .. .. .. .. ..
-.. .. .. .. .. .. PR ..
-```
+.. .. .. .. .. .. PR .."/>
 
 If you want some more examples, check out the *Library* page!
 
@@ -43,26 +41,22 @@ blogEditorExampleText =
 
 There are many details about Paco Ŝako that I would love to discuss. Having a way to write and share articles on Paco Ŝako online would greatly contribute this. In this editor you can use [Github flavored Markdown](https://guides.github.com/features/mastering-markdown/) to write articles on Paco Ŝako.
 
-We have replaced code blocks with rendered Paco Ŝako positions. You can create positions in the editor and then create a blog post based on it.
+You can use a `<puzzle data="..">` tag to render a Paco Ŝako position. Just copy the "Text notation you can store" from the Position editor into the Blog editor.
 
-```
-.. R. .. RR .. .. QQ ..
+<puzzle data=".. R. .. RR .. .. QQ ..
 .. .. .. .. PB .. .P P.
 .. .. PP .. .. .N .. ..
 K. .. .P .. .P NP B. ..
 P. .. .. .. .P PP .. P.
 .R .. P. .. .. .. .K ..
 B. .P .. .. .. .. N. ..
-.. .. .. .. .N .. .. PB
--
-N. .. .. .. .. .. .. .R
-.Q PP .. .. P. P. .. ..
-.. .. .P .. .. .K .. ..
-.. .. .. .. PP K. N. ..
-.. .. .P .. B. .B QP ..
-P. .P R. .R .. PN .. .P
-.P P. .. .. .. .. .. PB
-.. .. .. .. .. .. BN R.
+.. .. .. .. .N .. .. PB"/>
+
+Note that even with a user account, the content you edit in the Blog editor can not be saved yet. Please make sure to save your texts in a text file.
+
+```
+Code blocks are also supported.
+But they don't have any syntax highlighting :(
 ```
 
-Note that even with a user account, the content you edit in the Blog editor can not be saved yet. Please make sure to save your texts in a text file."""
+Code blocks will be useful when we communicate about the internals of this website."""
