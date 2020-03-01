@@ -1,4 +1,4 @@
-module StaticText exposing (blogEditorExampleText, mainPageGreetingText)
+module StaticText exposing (blogEditorExampleText, mainPageGreetingText, witness)
 
 
 mainPageGreetingText : String
@@ -60,3 +60,59 @@ But they don't have any syntax highlighting :(
 ```
 
 Code blocks will be useful when we communicate about the internals of this website."""
+
+
+witness : String
+witness =
+    """# Witnessing Ŝako
+
+In mathematical logic, a [witness](<https://en.wikipedia.org/wiki/Witness_(mathematics)>) is a specific value `t` to be substituted for variable `x` of an existential statement of the form `there exists x with phi(x)` such that `phi(t)` is true. I believe we can use this concept to efficiently reasoning about Paco Ŝako positions.
+
+Some basic definitions:
+
+* An *action* can be lifting a piece (or union), placing a piece (or union) or promoting a piece.
+* A *move* is a sequence of actions.
+* A *legal move* is a move that is permitted by the rules of Paco Ŝako.
+* Note that all legal moves leave the board in a *settled* position, this is a position where all pieces have a position on the board and no piece is lifted.
+
+I will, without loss of generality, describe some definitions only for a single player. The symmetric definition holds for the other player.
+
+The black player is in *Ŝako*, when there exists a *legal move* for white that ends with the black king in a union. Such a move is called a *Ŝako witness* for white. A move that does not end with the black player in a union or is not legal, is not a witness.
+
+Checking whether a move constitutes a Ŝako witness can be easily done by checking
+legality of the move. I have already implemented a function in my `pacosako-rust` library that returns all Ŝako witnesses for a given position.
+
+```
+type alias Move : List Action
+
+isLegal : Color -> Position -> Move -> Boolean
+
+isWitness : Color -> Position -> Move -> Boolean
+
+determineSako : Color -> Position -> List Move
+```
+
+Please note that we don't have a `Witness` type as this is just a subtype of `Move`. While some programming languages may represent this as a [refinement type](https://en.wikipedia.org/wiki/Refinement_type) I am not doing this.
+
+The `determineSako` function is actually quite simple:
+
+```
+-- This function is itself build on a legalActions function. The implementation
+-- of legalMoves builds a graph, eliminates cycles and the finds all paths.
+legalMoves : Color -> Position -> List Move
+
+determineSako color position =
+    legalMoves color position
+        |> List.filter (isWitness color position)
+```
+
+## Mate
+
+The black player is in *mate* (also called in *Paco Ŝako*), when
+
+1. they are in Ŝako,
+2. the white player is not in Ŝako,
+3. each legal move they can execute still results in a position where they are in Ŝako.
+
+I do not have an implementation for `determineMate` yet, but it may be a good way to start by working out what it should return.
+"""
