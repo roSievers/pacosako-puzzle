@@ -2208,22 +2208,40 @@ renderer taco =
         \image body ->
             Element.image [ Element.width Element.fill ] { src = image.src, description = body }
                 |> Ok
-    , list =
+    , unorderedList =
         \items ->
             Element.column [ Element.spacing 15 ]
                 (items
+                    |> List.map (\(Markdown.Parser.ListItem _ itemBlocks) -> itemBlocks)
                     |> List.map
                         (\itemBlocks ->
-                            Element.row [ Element.spacing 5 ]
-                                [ Element.el
-                                    [ Element.alignTop ]
+                            Element.wrappedRow []
+                                (Element.el
+                                    [ Element.alignTop, padding 5 ]
                                     (Element.text "•")
-                                , itemBlocks
-                                ]
+                                    :: itemBlocks
+                                )
+                        )
+                )
+    , orderedList =
+        \startingIndex items ->
+            Element.column [ Element.spacing 15 ]
+                (items
+                    |> List.indexedMap
+                        (\i itemBlocks ->
+                            Element.wrappedRow []
+                                (Element.el
+                                    [ Element.alignTop, padding 5 ]
+                                    (Element.text (String.fromInt (i + startingIndex) ++ "."))
+                                    :: itemBlocks
+                                )
                         )
                 )
     , codeBlock = codeBlock
     , html = htmlRenderer taco
+    , blockQuote =
+        \items ->
+            Element.column [ spacing 15 ] items
     }
 
 
