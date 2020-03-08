@@ -275,7 +275,9 @@ getDragPiece decoration =
 
 
 type alias BlogModel =
-    { text : String }
+    { saveState : SaveState
+    , content : Article
+    }
 
 
 type PositionParseResult
@@ -347,6 +349,7 @@ type Msg
     | LogoutSuccess
     | AllPositionsLoadedSuccess (List StoredPosition)
     | GotAllArticles (List Article)
+    | EditArticle Article
 
 
 {-| Messages that may only affect data in the position editor page.
@@ -379,6 +382,7 @@ type EditorMsg
 
 type BlogEditorMsg
     = OnMarkdownInput String
+    | OnTitleInput String
 
 
 type LoginPageMsg
@@ -434,7 +438,16 @@ initialEditor flags =
 
 initialBlog : BlogModel
 initialBlog =
-    { text = StaticText.blogEditorExampleText }
+    { content = initArticle
+    , saveState = SaveDoesNotExist
+    }
+
+
+openArticleInEditor : Article -> BlogModel
+openArticleInEditor article =
+    { content = article
+    , saveState = SaveDoesNotExist
+    }
 
 
 initialLogin : LoginModel
@@ -586,6 +599,14 @@ update msg model =
 
         GotAllArticles list ->
             ( { model | articleBrowser = RemoteData.Success list }, Cmd.none )
+
+        EditArticle articleData ->
+            ( { model
+                | blog = openArticleInEditor articleData
+                , page = BlogPage
+              }
+            , Cmd.none
+            )
 
 
 {-| Helper function to update the color scheme inside the taco.
@@ -1250,7 +1271,10 @@ updateBlogEditor : BlogEditorMsg -> BlogModel -> ( BlogModel, Cmd Msg )
 updateBlogEditor msg blog =
     case msg of
         OnMarkdownInput newText ->
-            ( { blog | text = newText }, Cmd.none )
+            ( { blog | content = setArticleBody newText blog.content }, Cmd.none )
+
+        OnTitleInput newTitle ->
+            ( { blog | content = setArticleTitle newTitle blog.content }, Cmd.none )
 
 
 updateLoginPage : LoginPageMsg -> LoginModel -> ( LoginModel, Cmd Msg )
@@ -2163,21 +2187,39 @@ blogUi taco blog =
         [ Element.html FontAwesome.Styles.css
         , pageHeader taco BlogPage yourDataWillNotBeSaved
         , Element.row [ Element.width Element.fill ]
-            [ Input.multiline [ Element.width (Element.px 600) ]
-                { onChange = OnMarkdownInput >> BlogMsgWrapper
-                , text = blog.text
-                , placeholder = Nothing
-                , label = Input.labelHidden "Markdown input"
-                , spellcheck = False
-                }
-            , case markdownView taco blog.text of
-                Ok rendered ->
-                    centerColumn rendered
-
-                Err errors ->
-                    Element.text errors
+            [ blogUiInput blog
+            , blogUiPreview taco blog
             ]
         ]
+
+
+blogUiInput : BlogModel -> Element Msg
+blogUiInput blog =
+    Element.column [ spacing 5, Element.width (Element.px 600) ]
+        [ Input.text []
+            { onChange = OnTitleInput >> BlogMsgWrapper
+            , text = blog.content.title
+            , placeholder = Just (Input.placeholder [] (Element.text "Untitled Article"))
+            , label = Input.labelHidden "Title of the article"
+            }
+        , Input.multiline [ width fill ]
+            { onChange = OnMarkdownInput >> BlogMsgWrapper
+            , text = blog.content.body
+            , placeholder = Nothing
+            , label = Input.labelHidden "Markdown input"
+            , spellcheck = True
+            }
+        ]
+
+
+blogUiPreview : Taco -> BlogModel -> Element Msg
+blogUiPreview taco blog =
+    case markdownView taco (articleMarkdownWithTitle blog.content) of
+        Ok rendered ->
+            centerColumn rendered
+
+        Err errors ->
+            Element.text errors
 
 
 markdownView : Taco -> String -> Result String (List (Element Msg))
@@ -2461,7 +2503,19 @@ articleViewPage taco article =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
         , pageHeader taco (ArticleViewPage article) Element.none
+        , articleInfoSubmenu taco article
         , articleViewPageContent taco article
+        ]
+
+
+articleInfoSubmenu : Taco -> Article -> Element Msg
+articleInfoSubmenu taco article =
+    Element.row [ width fill, Background.color (Element.rgb255 240 240 240) ]
+        [ Input.button
+            [ padding 10 ]
+            { onPress = Just (EditArticle article)
+            , label = Element.text "Edit this article"
+            }
         ]
 
 
@@ -2470,16 +2524,17 @@ TODO: I need to set article.title as the title of the browser page.
 -}
 articleViewPageContent : Taco -> Article -> Element Msg
 articleViewPageContent taco article =
-    let
-        text =
-            "# " ++ article.title ++ "\n\n" ++ article.body
-    in
-    case markdownView taco text of
+    case markdownView taco (articleMarkdownWithTitle article) of
         Ok rendered ->
             centerColumn rendered
 
         Err errors ->
             Element.text errors
+
+
+articleMarkdownWithTitle : Article -> String
+articleMarkdownWithTitle article =
+    "# " ++ article.title ++ "\n\n" ++ article.body
 
 
 
@@ -2699,13 +2754,68 @@ postAnalysePosition position =
         }
 
 
+{-| An Article record holds all data of an article that is persisted on the
+database. For an Article that is not persisted yet, id is set to -1.
+-}
 type alias Article =
     { id : Int
     , creator : Int
     , title : String
     , body : String
-    , visible : Int
+    , visible : ArticleVisibilityStatus
     }
+
+
+type ArticleVisibilityStatus
+    = ArticleVisibilityPrivate
+    | ArticleVisibilityPublic
+
+
+decodeArticleVisibilityStatus : Decoder ArticleVisibilityStatus
+decodeArticleVisibilityStatus =
+    Decode.int
+        |> Decode.andThen
+            (\statusId ->
+                case statusId of
+                    0 ->
+                        Decode.succeed ArticleVisibilityPrivate
+
+                    1 ->
+                        Decode.succeed ArticleVisibilityPublic
+
+                    _ ->
+                        Decode.fail ("Unknown visibility status id " ++ String.fromInt statusId)
+            )
+
+
+encodeArticleVisibilityStatus : ArticleVisibilityStatus -> Value
+encodeArticleVisibilityStatus status =
+    case status of
+        ArticleVisibilityPrivate ->
+            Encode.int 0
+
+        ArticleVisibilityPublic ->
+            Encode.int 1
+
+
+initArticle : Article
+initArticle =
+    { id = -1
+    , creator = -1
+    , title = StaticText.initArticleTitle
+    , body = StaticText.blogEditorExampleText
+    , visible = ArticleVisibilityPrivate
+    }
+
+
+setArticleBody : String -> Article -> Article
+setArticleBody newBody article =
+    { article | body = newBody }
+
+
+setArticleTitle : String -> Article -> Article
+setArticleTitle newTitle article =
+    { article | title = newTitle }
 
 
 decodeArticle : Decoder Article
@@ -2715,7 +2825,7 @@ decodeArticle =
         (Decode.field "creator" Decode.int)
         (Decode.field "title" Decode.string)
         (Decode.field "body" Decode.string)
-        (Decode.field "visible" Decode.int)
+        (Decode.field "visible" decodeArticleVisibilityStatus)
 
 
 encodeArticle : Article -> Value
@@ -2725,7 +2835,7 @@ encodeArticle record =
         , ( "creator", Encode.int <| record.creator )
         , ( "title", Encode.string <| record.title )
         , ( "body", Encode.string <| record.body )
-        , ( "visible", Encode.int <| record.visible )
+        , ( "visible", encodeArticleVisibilityStatus <| record.visible )
         ]
 
 

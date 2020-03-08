@@ -1,4 +1,9 @@
-module StaticText exposing (blogEditorExampleText, mainPageGreetingText, witness)
+module StaticText exposing
+    ( blogEditorExampleText
+    , initArticleTitle
+    , mainPageGreetingText
+    , witness
+    )
 
 
 mainPageGreetingText : String
@@ -35,11 +40,14 @@ The tool collection now also includes a *Blog Editor* that you can use to write 
 Note that even with a user account, the content you edit in the Blog editor can not be saved yet. Please make sure to save your texts in a text file."""
 
 
+initArticleTitle : String
+initArticleTitle =
+    "Markdown editor with Paco Ŝako support"
+
+
 blogEditorExampleText : String
 blogEditorExampleText =
-    """# Markdown editor with Paco Ŝako support
-
-There are many details about Paco Ŝako that I would love to discuss. Having a way to write and share articles on Paco Ŝako online would greatly contribute this. In this editor you can use [Github flavored Markdown](https://guides.github.com/features/mastering-markdown/) to write articles on Paco Ŝako.
+    """There are many details about Paco Ŝako that I would love to discuss. Having a way to write and share articles on Paco Ŝako online would greatly contribute this. In this editor you can use [Github flavored Markdown](https://guides.github.com/features/mastering-markdown/) to write articles on Paco Ŝako.
 
 You can use a `<puzzle data="..">` tag to render a Paco Ŝako position. Just copy the "Text notation you can store" from the Position editor into the Blog editor.
 
