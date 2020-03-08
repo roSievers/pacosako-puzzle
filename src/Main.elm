@@ -65,7 +65,7 @@ type Page
     | BlogPage
     | LoginPage
     | ArticleBrowserPage
-    | ArticleViewPage Article
+    | ArticleViewPage Article Bool
 
 
 type alias User =
@@ -349,6 +349,7 @@ type Msg
     | LogoutSuccess
     | AllPositionsLoadedSuccess (List StoredPosition)
     | GotAllArticles (List Article)
+    | GotReloadArticle Article
     | EditArticle Article
 
 
@@ -383,6 +384,8 @@ type EditorMsg
 type BlogEditorMsg
     = OnMarkdownInput String
     | OnTitleInput String
+    | SaveArticle Article
+    | GotArticleSave Article
 
 
 type LoginPageMsg
@@ -446,7 +449,12 @@ initialBlog =
 openArticleInEditor : Article -> BlogModel
 openArticleInEditor article =
     { content = article
-    , saveState = SaveDoesNotExist
+    , saveState =
+        if article.id > 0 then
+            SaveIsCurrent article.id
+
+        else
+            SaveDoesNotExist
     }
 
 
@@ -600,6 +608,27 @@ update msg model =
         GotAllArticles list ->
             ( { model | articleBrowser = RemoteData.Success list }, Cmd.none )
 
+        GotReloadArticle article ->
+            ( { model
+                | articleBrowser =
+                    RemoteData.map
+                        (\list -> List.setIf (\a -> a.id == article.id) article list)
+                        model.articleBrowser
+                , page =
+                    case model.page of
+                        ArticleViewPage oldArticle _ ->
+                            if oldArticle.id == article.id then
+                                ArticleViewPage article True
+
+                            else
+                                model.page
+
+                        _ ->
+                            model.page
+              }
+            , Cmd.none
+            )
+
         EditArticle articleData ->
             ( { model
                 | blog = openArticleInEditor articleData
@@ -644,6 +673,9 @@ pageOpenSideEffect model =
 
                 _ ->
                     Cmd.none
+
+        ArticleViewPage article False ->
+            gotReloadArticle article.id
 
         _ ->
             Cmd.none
@@ -1271,10 +1303,36 @@ updateBlogEditor : BlogEditorMsg -> BlogModel -> ( BlogModel, Cmd Msg )
 updateBlogEditor msg blog =
     case msg of
         OnMarkdownInput newText ->
-            ( { blog | content = setArticleBody newText blog.content }, Cmd.none )
+            ( { blog
+                | content = setArticleBody newText blog.content
+                , saveState = saveStateModify blog.saveState
+              }
+            , Cmd.none
+            )
 
         OnTitleInput newTitle ->
-            ( { blog | content = setArticleTitle newTitle blog.content }, Cmd.none )
+            ( { blog
+                | content = setArticleTitle newTitle blog.content
+                , saveState = saveStateModify blog.saveState
+              }
+            , Cmd.none
+            )
+
+        SaveArticle article ->
+            ( { blog
+                -- TODO: Set state to "saving"
+                | saveState = blog.saveState
+              }
+            , postArticle article
+            )
+
+        GotArticleSave newArticle ->
+            ( { blog
+                | content = updateArticleSaveInformation newArticle blog.content
+                , saveState = saveStateStored newArticle.id blog.saveState
+              }
+            , Cmd.none
+            )
 
 
 updateLoginPage : LoginPageMsg -> LoginModel -> ( LoginModel, Cmd Msg )
@@ -1325,8 +1383,8 @@ globalUi model =
         ArticleBrowserPage ->
             articleBrowserPage model.taco model.articleBrowser
 
-        ArticleViewPage article ->
-            articleViewPage model.taco article
+        ArticleViewPage article isFreshlyReloaded ->
+            articleViewPage model.taco article isFreshlyReloaded
 
 
 type alias PageHeaderInfo =
@@ -2185,12 +2243,42 @@ blogUi : Taco -> BlogModel -> Element Msg
 blogUi taco blog =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco BlogPage yourDataWillNotBeSaved
+        , pageHeader taco BlogPage (saveStateBlogEditor blog)
         , Element.row [ Element.width Element.fill ]
             [ blogUiInput blog
             , blogUiPreview taco blog
             ]
         ]
+
+
+saveStateBlogEditor : BlogModel -> Element Msg
+saveStateBlogEditor blog =
+    case blog.saveState of
+        SaveIsCurrent id ->
+            Element.el [ padding 10, Font.color (Element.rgb255 150 200 150), Font.bold ] (Element.text <| "Saved. (id=" ++ String.fromInt id ++ ")")
+
+        SaveIsModified id ->
+            Input.button
+                [ padding 10
+                , Font.color (Element.rgb255 200 150 150)
+                , Font.bold
+                ]
+                { onPress = Just (BlogMsgWrapper (SaveArticle blog.content))
+                , label = Element.text <| "Unsaved Changes! (id=" ++ String.fromInt id ++ ")"
+                }
+
+        SaveDoesNotExist ->
+            Input.button
+                [ padding 10
+                , Font.color (Element.rgb255 200 150 150)
+                , Font.bold
+                ]
+                { onPress = Just (BlogMsgWrapper (SaveArticle blog.content))
+                , label = Element.text "Unsaved Changes!"
+                }
+
+        SaveNotRequired ->
+            Element.none
 
 
 blogUiInput : BlogModel -> Element Msg
@@ -2493,16 +2581,16 @@ articleBrowserPageContent _ articleBrowser =
 articleListEntry : Article -> Element Msg
 articleListEntry article =
     Input.button []
-        { onPress = Just (OpenPage (ArticleViewPage article))
+        { onPress = Just (OpenPage (ArticleViewPage article False))
         , label = Element.text article.title
         }
 
 
-articleViewPage : Taco -> Article -> Element Msg
-articleViewPage taco article =
+articleViewPage : Taco -> Article -> Bool -> Element Msg
+articleViewPage taco article isFreshlyReloaded =
     Element.column [ width fill ]
         [ Element.html FontAwesome.Styles.css
-        , pageHeader taco (ArticleViewPage article) Element.none
+        , pageHeader taco (ArticleViewPage article isFreshlyReloaded) Element.none
         , articleInfoSubmenu taco article
         , articleViewPageContent taco article
         ]
@@ -2818,6 +2906,11 @@ setArticleTitle newTitle article =
     { article | title = newTitle }
 
 
+updateArticleSaveInformation : Article -> Article -> Article
+updateArticleSaveInformation articleFromServer articleFromClient =
+    { articleFromClient | id = articleFromServer.id }
+
+
 decodeArticle : Decoder Article
 decodeArticle =
     Decode.map5 Article
@@ -2844,6 +2937,26 @@ getAllArticles =
     Http.get
         { url = "/api/article"
         , expect = Http.expectJson (defaultErrorHandler GotAllArticles) (Decode.list decodeArticle)
+        }
+
+
+gotReloadArticle : Int -> Cmd Msg
+gotReloadArticle articleId =
+    Http.get
+        { url = "/api/article/" ++ String.fromInt articleId
+        , expect = Http.expectJson (defaultErrorHandler GotReloadArticle) decodeArticle
+        }
+
+
+postArticle : Article -> Cmd Msg
+postArticle article =
+    Http.post
+        { url = "/api/article"
+        , body = Http.jsonBody (encodeArticle article)
+        , expect =
+            Http.expectJson
+                (defaultErrorHandler (GotArticleSave >> BlogMsgWrapper))
+                decodeArticle
         }
 
 
