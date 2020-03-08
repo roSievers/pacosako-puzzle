@@ -18,7 +18,7 @@ import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes
 import Http
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Markdown.Html
@@ -50,6 +50,7 @@ type alias Model =
     , editor : EditorModel
     , blog : BlogModel
     , login : LoginModel
+    , articleBrowser : ArticleBrowserModel
 
     -- LibraryPage
     , exampleFile : WebData (List PacoPosition)
@@ -63,6 +64,8 @@ type Page
     | LibraryPage
     | BlogPage
     | LoginPage
+    | ArticleBrowserPage
+    | ArticleViewPage Article
 
 
 type alias User =
@@ -81,6 +84,10 @@ type alias LoginModel =
     { usernameRaw : String
     , passwordRaw : String
     }
+
+
+type alias ArticleBrowserModel =
+    WebData (List Article)
 
 
 {-| Represents the possible save states a persisted object can have.
@@ -339,6 +346,7 @@ type Msg
     | LoginSuccess User
     | LogoutSuccess
     | AllPositionsLoadedSuccess (List StoredPosition)
+    | GotAllArticles (List Article)
 
 
 {-| Messages that may only affect data in the position editor page.
@@ -445,7 +453,7 @@ parseWindowSize value =
         |> Result.withDefault ( 100, 100 )
 
 
-sizeDecoder : Decode.Decoder ( Int, Int )
+sizeDecoder : Decoder ( Int, Int )
 sizeDecoder =
     Decode.map2 (\x y -> ( x, y ))
         (Decode.field "width" Decode.int)
@@ -459,6 +467,7 @@ init flags =
       , editor = initialEditor flags
       , blog = initialBlog
       , login = initialLogin
+      , articleBrowser = RemoteData.NotAsked
       , exampleFile = RemoteData.Loading
       , storedPositions = RemoteData.NotAsked
       }
@@ -548,9 +557,7 @@ update msg model =
 
         OpenPage newPage ->
             ( { model | page = newPage }
-            , Task.attempt
-                (GotBoardPosition >> EditorMsgWrapper)
-                (Dom.getElement "boardDiv")
+            , pageOpenSideEffect { model | page = newPage }
             )
 
         LoginSuccess user ->
@@ -577,6 +584,9 @@ update msg model =
         AllPositionsLoadedSuccess list ->
             ( { model | storedPositions = RemoteData.Success list }, Cmd.none )
 
+        GotAllArticles list ->
+            ( { model | articleBrowser = RemoteData.Success list }, Cmd.none )
+
 
 {-| Helper function to update the color scheme inside the taco.
 -}
@@ -593,6 +603,29 @@ setLoggedInUser user taco =
 removeLoggedInUser : Taco -> Taco
 removeLoggedInUser taco =
     { taco | login = Nothing }
+
+
+pageOpenSideEffect : Model -> Cmd Msg
+pageOpenSideEffect model =
+    case model.page of
+        EditorPage ->
+            Task.attempt
+                (GotBoardPosition >> EditorMsgWrapper)
+                (Dom.getElement "boardDiv")
+
+        ArticleBrowserPage ->
+            case model.articleBrowser of
+                RemoteData.Failure _ ->
+                    getAllArticles
+
+                RemoteData.NotAsked ->
+                    getAllArticles
+
+                _ ->
+                    Cmd.none
+
+        _ ->
+            Cmd.none
 
 
 updateEditor : EditorMsg -> EditorModel -> ( EditorModel, Cmd Msg )
@@ -1205,7 +1238,7 @@ subscriptions _ =
         |> Sub.map EditorMsgWrapper
 
 
-decodeKeyStroke : Decode.Decoder KeyStroke
+decodeKeyStroke : Decoder KeyStroke
 decodeKeyStroke =
     Decode.map3 KeyStroke
         (Decode.field "key" Decode.string)
@@ -1265,6 +1298,12 @@ globalUi model =
         LoginPage ->
             loginUi model.taco model.login
 
+        ArticleBrowserPage ->
+            articleBrowserPage model.taco model.articleBrowser
+
+        ArticleViewPage article ->
+            articleViewPage model.taco article
+
 
 type alias PageHeaderInfo =
     { currentPage : Page
@@ -1283,6 +1322,7 @@ pageHeader taco currentPage additionalHeader =
         , pageHeaderButton [] { currentPage = currentPage, targetPage = EditorPage, caption = "Position Editor" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = LibraryPage, caption = "Library" }
         , pageHeaderButton [] { currentPage = currentPage, targetPage = BlogPage, caption = "Blog Editor" }
+        , pageHeaderButton [] { currentPage = currentPage, targetPage = ArticleBrowserPage, caption = "Articles" }
         , additionalHeader
         , loginHeaderInfo taco
         ]
@@ -1332,13 +1372,7 @@ greetingText : Taco -> Element Msg
 greetingText taco =
     case markdownView taco StaticText.mainPageGreetingText of
         Ok rendered ->
-            Element.column
-                [ Element.spacing 30
-                , Element.padding 80
-                , Element.width (Element.fill |> Element.maximum 1000)
-                , Element.centerX
-                ]
-                rendered
+            centerColumn rendered
 
         Err errors ->
             Element.text errors
@@ -2138,13 +2172,7 @@ blogUi taco blog =
                 }
             , case markdownView taco blog.text of
                 Ok rendered ->
-                    Element.column
-                        [ Element.spacing 30
-                        , Element.padding 80
-                        , Element.width (Element.fill |> Element.maximum 1000)
-                        , Element.centerX
-                        ]
-                        rendered
+                    centerColumn rendered
 
                 Err errors ->
                     Element.text errors
@@ -2387,6 +2415,75 @@ loginHeaderInfo taco =
 
 
 --------------------------------------------------------------------------------
+-- Article browser UI ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+articleBrowserPage : Taco -> ArticleBrowserModel -> Element Msg
+articleBrowserPage taco articleBrowser =
+    Element.column [ width fill ]
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco ArticleBrowserPage Element.none
+        , articleBrowserPageContent taco articleBrowser
+        ]
+
+
+{-| Renders the page in which the list of all articles is shown to the user.
+Here the user may pick an article to view or to edit.
+-}
+articleBrowserPageContent : Taco -> ArticleBrowserModel -> Element Msg
+articleBrowserPageContent _ articleBrowser =
+    remoteDataHelper
+        { notAsked = Element.text "The list of articles has not been requested yet."
+        , loading = Element.text "The list of articles is loading now."
+        , failure = \_ -> Element.text "There was an error when loading the list of articles."
+        }
+        (\articleList ->
+            articleList
+                |> List.map articleListEntry
+                |> centerColumn
+        )
+        articleBrowser
+
+
+{-| Renders a single entry of the article overview.
+-}
+articleListEntry : Article -> Element Msg
+articleListEntry article =
+    Input.button []
+        { onPress = Just (OpenPage (ArticleViewPage article))
+        , label = Element.text article.title
+        }
+
+
+articleViewPage : Taco -> Article -> Element Msg
+articleViewPage taco article =
+    Element.column [ width fill ]
+        [ Element.html FontAwesome.Styles.css
+        , pageHeader taco (ArticleViewPage article) Element.none
+        , articleViewPageContent taco article
+        ]
+
+
+{-| Renders a single article.
+TODO: I need to set article.title as the title of the browser page.
+-}
+articleViewPageContent : Taco -> Article -> Element Msg
+articleViewPageContent taco article =
+    let
+        text =
+            "# " ++ article.title ++ "\n\n" ++ article.body
+    in
+    case markdownView taco text of
+        Ok rendered ->
+            centerColumn rendered
+
+        Err errors ->
+            Element.text errors
+
+
+
+--------------------------------------------------------------------------------
 -- REST api --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -2415,7 +2512,7 @@ encodeLoginData record =
         ]
 
 
-decodeUser : Decode.Decoder User
+decodeUser : Decoder User
 decodeUser =
     Decode.map2 User
         (Decode.field "user_id" Decode.int)
@@ -2493,7 +2590,7 @@ type alias SavePositionDone =
     }
 
 
-decodeSavePositionDone : Decode.Decoder SavePositionDone
+decodeSavePositionDone : Decoder SavePositionDone
 decodeSavePositionDone =
     Decode.map SavePositionDone
         (Decode.field "id" Decode.int)
@@ -2535,7 +2632,7 @@ type alias StoredPositionData =
     }
 
 
-decodeStoredPosition : Decode.Decoder StoredPosition
+decodeStoredPosition : Decoder StoredPosition
 decodeStoredPosition =
     Decode.map3 StoredPosition
         (Decode.field "id" Decode.int)
@@ -2543,7 +2640,7 @@ decodeStoredPosition =
         (Decode.field "data" decodeStoredPositionData)
 
 
-decodeStoredPositionData : Decode.Decoder StoredPositionData
+decodeStoredPositionData : Decoder StoredPositionData
 decodeStoredPositionData =
     Decode.map StoredPositionData
         (Decode.field "notation" Decode.string)
@@ -2557,7 +2654,7 @@ getAllSavedPositions =
         }
 
 
-decodePacoPositionData : Decode.Decoder PacoPosition
+decodePacoPositionData : Decoder PacoPosition
 decodePacoPositionData =
     Decode.andThen
         (\json ->
@@ -2584,7 +2681,7 @@ type alias AnalysisReport =
     }
 
 
-decodeAnalysisReport : Decode.Decoder AnalysisReport
+decodeAnalysisReport : Decoder AnalysisReport
 decodeAnalysisReport =
     Decode.map AnalysisReport
         (Decode.field "text_summary" Decode.string)
@@ -2599,6 +2696,44 @@ postAnalysePosition position =
             Http.expectJson
                 (defaultErrorHandler (EditorMsgWrapper << GotAnalysePosition))
                 decodeAnalysisReport
+        }
+
+
+type alias Article =
+    { id : Int
+    , creator : Int
+    , title : String
+    , body : String
+    , visible : Int
+    }
+
+
+decodeArticle : Decoder Article
+decodeArticle =
+    Decode.map5 Article
+        (Decode.field "id" Decode.int)
+        (Decode.field "creator" Decode.int)
+        (Decode.field "title" Decode.string)
+        (Decode.field "body" Decode.string)
+        (Decode.field "visible" Decode.int)
+
+
+encodeArticle : Article -> Value
+encodeArticle record =
+    Encode.object
+        [ ( "id", Encode.int <| record.id )
+        , ( "creator", Encode.int <| record.creator )
+        , ( "title", Encode.string <| record.title )
+        , ( "body", Encode.string <| record.body )
+        , ( "visible", Encode.int <| record.visible )
+        ]
+
+
+getAllArticles : Cmd Msg
+getAllArticles =
+    Http.get
+        { url = "/api/article"
+        , expect = Http.expectJson (defaultErrorHandler GotAllArticles) (Decode.list decodeArticle)
         }
 
 
@@ -2647,3 +2782,13 @@ remoteDataHelper config display data =
 
         RemoteData.Success a ->
             display a
+
+
+centerColumn : List (Element msg) -> Element msg
+centerColumn =
+    Element.column
+        [ Element.spacing 30
+        , Element.padding 80
+        , Element.width (Element.fill |> Element.maximum 1000)
+        , Element.centerX
+        ]
