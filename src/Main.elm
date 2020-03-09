@@ -351,6 +351,8 @@ type Msg
     | GotAllArticles (List Article)
     | GotReloadArticle Article
     | EditArticle Article
+    | PostArticleVisibility Article
+    | GotArticleVisibility Article
 
 
 {-| Messages that may only affect data in the position editor page.
@@ -636,6 +638,22 @@ update msg model =
               }
             , Cmd.none
             )
+
+        -- We don't just save the article, this may override changes. Instead, we call a special post route where we just set its visibility.
+        PostArticleVisibility article ->
+            ( model, postArticleVisibility article )
+
+        GotArticleVisibility savedArticle ->
+            case model.page of
+                ArticleViewPage currentArticle _ ->
+                    if currentArticle.id == savedArticle.id then
+                        ( { model | page = ArticleViewPage savedArticle True }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 {-| Helper function to update the color scheme inside the taco.
@@ -2598,13 +2616,38 @@ articleViewPage taco article isFreshlyReloaded =
 
 articleInfoSubmenu : Taco -> Article -> Element Msg
 articleInfoSubmenu taco article =
-    Element.row [ width fill, Background.color (Element.rgb255 240 240 240) ]
-        [ Input.button
-            [ padding 10 ]
+    Element.row
+        [ width fill
+        , Background.color (Element.rgb255 240 240 240)
+        ]
+        (Input.button [ padding 10 ]
             { onPress = Just (EditArticle article)
             , label = Element.text "Edit this article"
             }
-        ]
+            :: articleVisibilitySubmenuEntry article
+        )
+
+
+articleVisibilitySubmenuEntry : Article -> List (Element Msg)
+articleVisibilitySubmenuEntry article =
+    case article.visible of
+        ArticleVisibilityPrivate ->
+            [ Element.el [ padding 10 ]
+                (Element.text "This article is private, only you can see it")
+            , Input.button [ padding 10 ]
+                { onPress = Just (PostArticleVisibility { article | visible = ArticleVisibilityPublic })
+                , label = Element.text "Publish article"
+                }
+            ]
+
+        ArticleVisibilityPublic ->
+            [ Element.el [ padding 10 ]
+                (Element.text "This article is public")
+            , Input.button [ padding 10 ]
+                { onPress = Just (PostArticleVisibility { article | visible = ArticleVisibilityPrivate })
+                , label = Element.text "Make article private"
+                }
+            ]
 
 
 {-| Renders a single article.
@@ -2956,6 +2999,18 @@ postArticle article =
         , expect =
             Http.expectJson
                 (defaultErrorHandler (GotArticleSave >> BlogMsgWrapper))
+                decodeArticle
+        }
+
+
+postArticleVisibility : Article -> Cmd Msg
+postArticleVisibility article =
+    Http.post
+        { url = "/api/article/visible"
+        , body = Http.jsonBody (encodeArticle article)
+        , expect =
+            Http.expectJson
+                (defaultErrorHandler GotArticleVisibility)
                 decodeArticle
         }
 
