@@ -684,10 +684,10 @@ pageOpenSideEffect model =
         ArticleBrowserPage ->
             case model.articleBrowser of
                 RemoteData.Failure _ ->
-                    getAllArticles
+                    getAllMyArticles
 
                 RemoteData.NotAsked ->
-                    getAllArticles
+                    getAllMyArticles
 
                 _ ->
                     Cmd.none
@@ -2975,10 +2975,10 @@ encodeArticle record =
         ]
 
 
-getAllArticles : Cmd Msg
-getAllArticles =
+getAllMyArticles : Cmd Msg
+getAllMyArticles =
     Http.get
-        { url = "/api/article"
+        { url = "/api/article/my"
         , expect = Http.expectJson (defaultErrorHandler GotAllArticles) (Decode.list decodeArticle)
         }
 
